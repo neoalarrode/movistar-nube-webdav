@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"movistar-webdav-proxy/internal/webdav"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -43,7 +41,7 @@ func (s *Server) handleCopyEvents(w http.ResponseWriter, r *http.Request) {
 		sig := s.copySignature()
 		if sig != lastSig || time.Since(lastSent) > 15*time.Second {
 			if sig != lastSig {
-				b, err := json.Marshal(readCopyStatusWith(s.copyDir, s.copyControlDir, s.reads))
+				b, err := json.Marshal(readCopyStatus())
 				if err == nil && !send("data: "+string(b)+"\n\n") {
 					return
 				}
@@ -60,32 +58,16 @@ func (s *Server) handleCopyEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// copySignature resume la fecha y el tamaño de los archivos de estado de la copia:
-// si cambia, hay algo nuevo que enviar.
+// copySignature resume la actividad en curso: si cambia, hay algo nuevo que enviar.
 func (s *Server) copySignature() string {
 	var b strings.Builder
-	// La actividad (subidas, lecturas, cola) sale del propio proxy: cualquier cambio
-	// de lo que hay en curso o de su avance (por MB) es algo nuevo que enviar.
+	b.WriteString("#") // nunca vacía: el primer estado se envía siempre
+	// Cualquier cambio de lo que hay en curso o de su avance (por MB).
 	for _, t := range webdav.Transfers.Snapshot() {
 		fmt.Fprintf(&b, "%s|%s|%d;", t.Kind, t.Path, t.Bytes>>20)
 	}
-	b.WriteString("#")
-	if s.copyDir == "" {
-		return b.String()
-	}
-	stamp := func(path string) {
-		if fi, err := os.Stat(path); err == nil {
-			fmt.Fprintf(&b, "%d:%d;", fi.ModTime().UnixNano(), fi.Size())
-		} else {
-			b.WriteString("-;")
-		}
-	}
-	files, _ := filepath.Glob(filepath.Join(s.copyDir, "*"))
-	for _, f := range files {
-		stamp(f)
-	}
-	if s.copyControlDir != "" {
-		stamp(filepath.Join(s.copyControlDir, "bwlimit"))
+	for _, c := range webdav.ClientCopies(30 * time.Second) {
+		fmt.Fprintf(&b, "c%s|%d;", c.ID, c.Bytes>>20)
 	}
 	return b.String()
 }

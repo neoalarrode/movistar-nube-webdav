@@ -297,7 +297,6 @@ func main() {
 	}()
 	defer pubHTTP.Close()
 	uiServer.SetCrypt(cryptSvc)
-	webui.SetCloudFolders(cloudFolderLister(webdavServer))
 	cryptSvc.SetRootLister(rootDirLister(webdavServer))
 	// Contenido de los archivos diminutos (fichas del chunker...), una vez y en segundo
 	// plano cuando la base local esté sincronizada.
