@@ -55,33 +55,13 @@ func main() {
 		logger.Log("[Security] 🔒 Autenticación habilitada para WebDAV (Basic Auth: %s) y Panel Web (Formulario Web: %s)", logger.Mask(davAuth.Username), logger.Mask(uiAuth.Username))
 	}
 
-	// cargar configuración
-	cfg := config.LoadAccountConfig("")
-	// Actualizamos con las credenciales guardadas. Estas prevalecen ante variables del entorno TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID ??
-	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
-		notifier.Default.UpdateCredentials(cfg.TelegramBotToken, cfg.TelegramChatID)
-	}
-	// La configuración propia del proxy (modo web, guardada desde el panel) manda.
+	// La sesión vive en el navegador (modo web): el cliente de la API parte vacío.
+	cfg := config.AccountConfig{}
+	// Telegram guardado desde el panel; si no, TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID.
 	notifier.LoadStored()
 
-	if config.WebSessionEnabled() {
-		// El modo de autenticación se anuncia al iniciar la sesión web.
-	} else if cfg.DeviceID != "" {
-		logger.Log("[WebDAV] 💻 Modo Autenticación: CLIENTE OFICIAL WINDOWS (%s)", logger.Mask(cfg.DeviceID))
-	} else if cfg.RefreshToken != "" {
-		logger.Log("[WebDAV] 📱 Modo Autenticación: Tokens OAuth2 Activos")
-	} else if cfg.JSessionID != "" {
-		logger.Log("[WebDAV] 🌐 Modo Autenticación: Sesión Web (Fallback)")
-	} else {
-		logger.Log("[!] ⚠️ No se encontraron credenciales. Abre el panel web para vincular.")
-		_ = notifier.Alert(
-			"", // se mandará siempre, sino poner faltan_credenciales para recibir 1 a la hora
-			"", "Sin credenciales configuradas, cuenta no vinculada",
-			"El Proxy WebDAV ha arrancado pero no hay ninguna cuenta vinculada. Accede al panel web para vincular tu cuenta de Movistar/O2 Cloud y activar el acceso.",
-			"Arranque sin sesión activa, en espera de vinculación",
-		)
-
-		// PDTE No debería iniciarse servicios para evitar bloqueos, aborar arranque os.Exit(1) ????  o bien luego aplicar SetRunning(false) para pararlo??
+	if !config.WebSessionEnabled() {
+		logger.Log("[!] ⚠️ WEB_SESSION no está activado: el proxy solo funciona con la sesión web de Movistar Cloud (imagen Dockerfile.web).")
 	}
 
 	// log Huella TLS (uTLS)
@@ -136,12 +116,8 @@ func main() {
 
 	var metaStore *cache.MetadataStore
 	var dbPath string
-	if phoneClean := config.SanitizePhone(cfg.Phone); phoneClean != "" {
-		dbPath = filepath.Join(config.TokensDir, fmt.Sprintf("metadata_%s.db", phoneClean))
-	} else if webSess != nil {
+	if webSess != nil {
 		dbPath = filepath.Join(config.TokensDir, "metadata_web.db")
-	} else if cfg.RefreshToken != "" || cfg.DeviceID != "" || cfg.JSessionID != "" {
-		dbPath = filepath.Join(config.TokensDir, "metadata.db")
 	}
 	if dbPath != "" {
 		var msErr error
@@ -178,7 +154,7 @@ func main() {
 	}
 
 	// 2. Sincronización inicial de metadatos en segundo plano si hay credenciales activas
-	if metaStore != nil && !client.IsSessionExpired() && (client.WebMode() || cfg.RefreshToken != "" || cfg.DeviceID != "" || cfg.JSessionID != "") {
+	if metaStore != nil && !client.IsSessionExpired() && (client.WebMode() || cfg.JSessionID != "") {
 		go func() {
 			logger.Log("[Metadata] 🔄 Iniciando sincronización de metadatos en segundo plano...")
 			if _, syncErr := metaStore.SyncChanges(client, false); syncErr != nil {
@@ -359,25 +335,7 @@ func runHealthcheck() int {
 	return 1
 }
 
-func computeKeepAliveInterval(expiresInStr string, consecutiveFailures int) time.Duration {
-	if consecutiveFailures > 0 {
-		backoff := 30 * time.Second * time.Duration(1<<min(consecutiveFailures-1, 4))
-		if backoff > 10*time.Minute {
-			backoff = 10 * time.Minute
-		}
-		return backoff
-	}
-	if sec, err := strconv.Atoi(strings.TrimSpace(expiresInStr)); err == nil && sec > 120 {
-		half := time.Duration(sec/2) * time.Second
-		if half < 5*time.Minute {
-			return half
-		}
-	}
-	return 5 * time.Minute
-}
-
 func runKeepAlive(ctx context.Context, client *sapi.Client, isRunning func() bool) {
-	consecutiveFailures := 0
 	timer := time.NewTimer(5 * time.Minute)
 	defer timer.Stop()
 
@@ -390,47 +348,16 @@ func runKeepAlive(ctx context.Context, client *sapi.Client, isRunning func() boo
 				timer.Reset(5 * time.Minute)
 				continue
 			}
-			cfg := client.GetConfig()
 			if client.WebMode() {
-				// En modo web la comprobación también mantiene viva la sesión de la web.
+				// La comprobación también mantiene viva la sesión de la web.
 				if client.RefreshSession() {
 					logger.Log("[KeepAlive] 💓 Sesión web verificada en Movistar Cloud.")
 				}
 				timer.Reset(5 * time.Minute)
 				continue
 			}
-			if cfg.RefreshToken == "" && cfg.AccessToken == "" && cfg.ValidationKey == "" {
-				timer.Reset(5 * time.Minute)
-				continue
-			}
-			if client.IsSessionExpired() {
-				timer.Reset(5 * time.Minute)
-				continue
-			}
-
-			space, err := client.GetStorageSpace()
-			if err == nil && space != nil {
-				consecutiveFailures = 0
-				logger.Log("[KeepAlive] 💓 Sesión verificada en Movistar Cloud (HTTP 200).")
-			} else {
-				errStr := ""
-				if err != nil {
-					errStr = err.Error()
-				}
-				if client.IsSessionExpired() {
-					consecutiveFailures = 0
-					logger.Log("[KeepAlive] ⏸️ Sesión expirada pendiente de revinculación en el panel web. Pausando comprobaciones periódicas.")
-				} else if strings.Contains(errStr, "401") || strings.Contains(errStr, "sesión expirada") || strings.Contains(errStr, "no autorizada") {
-					// GetStorageSpace -> DoRequest ya ejecutó RefreshSession() internamente al recibir 401.
-					consecutiveFailures++
-					logger.Log("[KeepAlive] ❌ Fallo al verificar/renovar sesión (intento consecutivo #%d): %v", consecutiveFailures, err)
-				} else {
-					logger.Log("[KeepAlive] ⚠️ Comprobación de cuota omitida por error transitorio o rate limit (%v). La sesión sigue activa.", err)
-				}
-			}
-
-			nextInterval := computeKeepAliveInterval(client.GetConfig().ExpiresIn, consecutiveFailures)
-			timer.Reset(nextInterval)
+			// Sin sesión web no hay nada que mantener viva.
+			timer.Reset(5 * time.Minute)
 		}
 	}
 }
@@ -455,7 +382,7 @@ func runDeltaSync(ctx context.Context, client *sapi.Client, isRunning func() boo
 				continue
 			}
 			cfg := client.GetConfig()
-			if cfg.RefreshToken == "" && cfg.AccessToken == "" && cfg.ValidationKey == "" {
+			if cfg.ValidationKey == "" {
 				timer.Reset(interval)
 				continue
 			}

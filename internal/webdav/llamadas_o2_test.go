@@ -61,8 +61,7 @@ func TestEscriturasDuranteBloqueoWAF_503SinLlamarAO2(t *testing.T) {
 	t.Cleanup(mock.Close)
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", Phone: "612345678",
-		AccessToken: "a", RefreshToken: "r", ValidationKey: "vk",
+		Provider: "o2", ValidationKey: "vk",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -142,8 +141,7 @@ func TestSubidaDuranteBloqueoDeLaAPI(t *testing.T) {
 	_ = ms.UpsertFolder(sapi.FolderItem{ID: 10, Name: "Fotos", ParentID: 1})
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", Phone: "612345678",
-		AccessToken: "a", RefreshToken: "r", ValidationKey: "vk",
+		Provider: "o2", ValidationKey: "vk",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -215,8 +213,7 @@ func TestSubidaNuevaSinConsultarALaAPI(t *testing.T) {
 	_ = ms.UpsertFolder(sapi.FolderItem{ID: 10, Name: "Fotos", ParentID: 1})
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", Phone: "612345678",
-		AccessToken: "a", RefreshToken: "r", ValidationKey: "vk",
+		Provider: "o2", ValidationKey: "vk",
 	})
 	if err != nil {
 		t.Fatal(err)

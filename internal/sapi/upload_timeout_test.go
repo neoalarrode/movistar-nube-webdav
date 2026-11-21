@@ -42,8 +42,6 @@ func TestUploadFileToFolder_Retries408WithFreshConnection(t *testing.T) {
 
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		AccessToken:   "a",
-		RefreshToken:  "r",
 		ValidationKey: "v",
 	})
 	if err != nil {
@@ -66,8 +64,6 @@ func TestUploadFileToFolder_Retries408WithFreshConnection(t *testing.T) {
 func TestUploadTransportDisablesKeepAlives(t *testing.T) {
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		AccessToken:   "a",
-		RefreshToken:  "r",
 		ValidationKey: "v",
 	})
 	if err != nil {

@@ -130,9 +130,6 @@ func TestNormalDownload_ExpiredURLIsRefreshedAndRemembered(t *testing.T) {
 	srv := webDownloadServer(t, &oldHits, &lookups)
 	c, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "a",
-		RefreshToken:  "r",
 		ValidationKey: "vk",
 	})
 	if err != nil {
@@ -197,9 +194,6 @@ func TestUploadFileToFolder_TransientMED1048RetriesAndSucceeds(t *testing.T) {
 
 	c, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "a",
-		RefreshToken:  "r",
 		ValidationKey: "vk",
 	})
 	if err != nil {

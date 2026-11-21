@@ -4,30 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
-
-func TestSanitizePhone(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"+34 612 34 56 78", "612345678"},
-		{"34612345678", "612345678"},
-		{"612-345-678", "612345678"},
-		{"34123", "34123"}, // Menos de 9 dígitos no recorta "34"
-		{"abc", ""},
-	}
-	for _, tc := range tests {
-		if got := SanitizePhone(tc.input); got != tc.want {
-			t.Errorf("SanitizePhone(%q) = %q, want %q", tc.input, got, tc.want)
-		}
-	}
-}
 
 func TestValidateTelegramCredentials(t *testing.T) {
 	if !ValidateBotToken("123456789:ABCdefGHI_jkl-MNO") {
@@ -45,89 +25,6 @@ func TestValidateTelegramCredentials(t *testing.T) {
 	}
 	if ValidateChatID("bad chat id") || ValidateChatID("@ab") {
 		t.Error("expected invalid chat IDs to fail")
-	}
-}
-
-func TestSaveAndLoadAccountConfig_RoundTripAndInjection(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := TokensDir
-	TokensDir = tmpDir
-	defer func() { TokensDir = origTokensDir }()
-
-	// 1. Crear un .env legacy para verificar que SaveAccountConfig lo limpia al guardar account_<phone>.env
-	legacyEnv := filepath.Join(tmpDir, ".env")
-	if err := os.WriteFile(legacyEnv, []byte(`MOVISTAR_PHONE="600000000"`+"\n"), 0600); err != nil {
-		t.Fatalf("failed writing legacy .env: %v", err)
-	}
-
-	cfg := AccountConfig{
-		Provider:         "o2",
-		Phone:            "+34 611 22 33 44",
-		JSessionID:       "jsess-123",
-		ValidationKey:    "valkey-456",
-		DeviceID:         "fol-abc",
-		DeviceName:       `Mi "PC" \ Especial`,
-		RefreshToken:     "ref-token-xyz",
-		AccessToken:      "acc-token-uvw",
-		LastRefreshDate:  1700000000000,
-		ExpiresIn:        "7200",
-		TelegramBotToken: "987654321:XYZ_abc-123",
-		TelegramChatID:   "-100998877",
-	}
-
-	if err := SaveAccountConfig(cfg); err != nil {
-		t.Fatalf("SaveAccountConfig failed: %v", err)
-	}
-
-	// El .env legacy debe haberse eliminado para evitar duplicidad / desincronización RTR
-	if _, err := os.Stat(legacyEnv); !os.IsNotExist(err) {
-		t.Errorf("expected legacy .env to be removed after saving account_<phone>.env")
-	}
-
-	loaded := LoadAccountConfig("611223344")
-	if loaded.Provider != "o2" {
-		t.Errorf("Provider = %q, want o2", loaded.Provider)
-	}
-	if loaded.Phone != "611223344" {
-		t.Errorf("Phone = %q, want 611223344", loaded.Phone)
-	}
-	if loaded.DeviceName != `Mi "PC" \ Especial` {
-		t.Errorf("DeviceName = %q, want %q", loaded.DeviceName, `Mi "PC" \ Especial`)
-	}
-	if loaded.RefreshToken != "ref-token-xyz" || loaded.AccessToken != "acc-token-uvw" {
-		t.Errorf("tokens mismatch: %+v", loaded)
-	}
-	if loaded.TelegramBotToken != "987654321:XYZ_abc-123" || loaded.TelegramChatID != "-100998877" {
-		t.Errorf("telegram mismatch: %+v", loaded)
-	}
-
-	// Carga sin teléfono (como en el arranque de main.go) debe encontrar account_611223344.env
-	loadedDefault := LoadAccountConfig("")
-	if loadedDefault.Phone != "611223344" || loadedDefault.RefreshToken != "ref-token-xyz" {
-		t.Errorf("LoadAccountConfig(\"\") failed to load saved account: %+v", loadedDefault)
-	}
-
-	// 2. Intentar inyección de salto de línea en un campo libre
-	badCfg := cfg
-	badCfg.DeviceName = "PC\nMOVISTAR_REFRESH_TOKEN=\"hacked\""
-	if err := SaveAccountConfig(badCfg); err == nil {
-		t.Errorf("expected SaveAccountConfig to reject newline injection")
-	}
-
-	// 3. Intentar token de Telegram con comillas o salto de línea
-	badTg := cfg
-	badTg.TelegramBotToken = "12345:abc\"\nINJECTED=\"1"
-	if err := SaveAccountConfig(badTg); err == nil {
-		t.Errorf("expected SaveAccountConfig to reject invalid telegram bot token")
-	}
-
-	// Verificar que el fichero en disco no contiene la cadena inyectada
-	rawBytes, err := os.ReadFile(filepath.Join(tmpDir, "account_611223344.env"))
-	if err != nil {
-		t.Fatalf("failed reading account file: %v", err)
-	}
-	if strings.Contains(string(rawBytes), "INJECTED") || strings.Contains(string(rawBytes), "hacked") {
-		t.Errorf("injected content found in env file: %s", string(rawBytes))
 	}
 }
 
@@ -194,62 +91,6 @@ func TestExtractClientIP(t *testing.T) {
 	}
 }
 
-func TestTokensEncryptionKey_AESGCM(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := TokensDir
-	TokensDir = tmpDir
-	defer func() { TokensDir = origTokensDir }()
-
-	t.Setenv("TOKENS_ENCRYPTION_KEY", "mi-clave-maestra-super-secreta-2026")
-
-	cfg := AccountConfig{
-		Provider:         "movistar",
-		Phone:            "699887766",
-		JSessionID:       "plain-jsession-secret",
-		ValidationKey:    "plain-valkey-secret",
-		RefreshToken:     "plain-refresh-token-secret",
-		AccessToken:      "plain-access-token-secret",
-		TelegramBotToken: "11223344:AABBCCDDEEFF_secret",
-		TelegramChatID:   "12345678",
-	}
-
-	if err := SaveAccountConfig(cfg); err != nil {
-		t.Fatalf("SaveAccountConfig with encryption failed: %v", err)
-	}
-
-	envFile := filepath.Join(tmpDir, "account_699887766.env")
-	rawBytes, err := os.ReadFile(envFile)
-	if err != nil {
-		t.Fatalf("failed reading encrypted env file: %v", err)
-	}
-	rawStr := string(rawBytes)
-
-	// Verificar que ningún secreto aparece en texto plano en el disco y que usan prefijo enc:v1:
-	for _, secret := range []string{"plain-jsession-secret", "plain-valkey-secret", "plain-refresh-token-secret", "plain-access-token-secret", "11223344:AABBCCDDEEFF_secret"} {
-		if strings.Contains(rawStr, secret) {
-			t.Errorf("plaintext secret %q leaked on disk when TOKENS_ENCRYPTION_KEY is set:\n%s", secret, rawStr)
-		}
-	}
-	if !strings.Contains(rawStr, `MOVISTAR_REFRESH_TOKEN="enc:v1:`) {
-		t.Errorf("expected enc:v1: prefix in saved file, got:\n%s", rawStr)
-	}
-
-	// Verificar que LoadAccountConfig descifra correctamente con la clave correcta
-	loaded := LoadAccountConfig("699887766")
-	if loaded.RefreshToken != cfg.RefreshToken || loaded.AccessToken != cfg.AccessToken ||
-		loaded.ValidationKey != cfg.ValidationKey || loaded.JSessionID != cfg.JSessionID ||
-		loaded.TelegramBotToken != cfg.TelegramBotToken {
-		t.Errorf("decrypted config mismatch: got %+v", loaded)
-	}
-
-	// Verificar que con una clave incorrecta NO se descifran los secretos
-	t.Setenv("TOKENS_ENCRYPTION_KEY", "clave-incorrecta")
-	wrongLoaded := LoadAccountConfig("699887766")
-	if wrongLoaded.RefreshToken != "" || wrongLoaded.AccessToken != "" {
-		t.Errorf("expected empty tokens when decryption key is wrong, got: %+v", wrongLoaded)
-	}
-}
-
 func TestGetSyncInterval(t *testing.T) {
 	t.Setenv("SAPI_CLIENT_PROFILE", "browser")
 	t.Setenv("SYNC_INTERVAL_SEC", "")
@@ -283,5 +124,25 @@ func TestTransferLimits(t *testing.T) {
 	t.Setenv("WEBDAV_MAX_UPLOADS", "0")
 	if d, u := TransferLimits(true); d != 6 || u != 2 {
 		t.Errorf("con variables: esperado 6/2 (0 se ignora), obtenido %d/%d", d, u)
+	}
+}
+
+// Con TOKENS_ENCRYPTION_KEY los secretos se guardan cifrados (enc:v1:) y solo se
+// descifran con la misma clave.
+func TestTokensEncryptionKey_AESGCM(t *testing.T) {
+	t.Setenv("TOKENS_ENCRYPTION_KEY", "mi-clave-maestra-super-secreta-2026")
+	enc, err := EncryptSecret("plain-valkey-secret")
+	if err != nil {
+		t.Fatalf("EncryptSecret: %v", err)
+	}
+	if !strings.HasPrefix(enc, "enc:v1:") || strings.Contains(enc, "plain-valkey-secret") {
+		t.Fatalf("esperaba el secreto cifrado con prefijo enc:v1:, obtenido %q", enc)
+	}
+	if got := DecryptSecret(enc); got != "plain-valkey-secret" {
+		t.Fatalf("DecryptSecret con la clave buena = %q", got)
+	}
+	t.Setenv("TOKENS_ENCRYPTION_KEY", "clave-incorrecta")
+	if got := DecryptSecret(enc); got == "plain-valkey-secret" {
+		t.Fatal("con una clave incorrecta no debe descifrarse")
 	}
 }

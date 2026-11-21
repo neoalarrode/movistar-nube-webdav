@@ -51,7 +51,7 @@ func streamCloud(t *testing.T, uploadStatus int) (*Server, func() []byte) {
 		}
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestStreamOnly_WaitsForInitialBuffer(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":{"folders":[{"id":100,"name":"Root","parentid":0,"magic":true}]}}`)
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -20,9 +20,6 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.S
 
 	c, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test_token",
-		RefreshToken:  "test_refresh",
 		ValidationKey: "test_vk",
 	})
 	if err != nil {
@@ -156,7 +153,6 @@ func TestGetProfileChanges_Errors(t *testing.T) {
 		client, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 		})
-		client.cfg.RefreshToken = ""
 		_, err := client.GetProfileChanges("0")
 		// Perfil desktop: un login fallido es transitorio (se reintentará más tarde).
 		if err == nil || (!strings.Contains(err.Error(), "401") && !errors.Is(err, ErrSessionRefreshTransient)) {

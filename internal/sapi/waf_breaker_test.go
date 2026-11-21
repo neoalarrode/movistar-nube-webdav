@@ -41,7 +41,7 @@ func wafTestServer(t *testing.T, modo *atomic.Value, hits *int32) *Client {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	c, err := NewClient(config.AccountConfig{RefreshToken: "r", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestSubidaCon401RenuevaLaSesion(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(srv.Close)
-	c, err := NewClient(config.AccountConfig{AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestDeleteFile_403DelWAFNoSeReintenta(t *testing.T) {
 		_, _ = io.WriteString(w, cloudFrontBlockPage)
 	}))
 	t.Cleanup(srv.Close)
-	c, err := NewClient(config.AccountConfig{RefreshToken: "r", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

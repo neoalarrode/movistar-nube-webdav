@@ -282,9 +282,9 @@ func TestMediaCRUD_AndCaseInsensitivity(t *testing.T) {
 	// ListMediaInFolder
 	m2 := sapi.MediaItem{
 		ID:       "media_002",
-		Name:             "Alpha.txt",
-		Size:             512,
-		FolderID:         20,
+		Name:     "Alpha.txt",
+		Size:     512,
+		FolderID: 20,
 	}
 	if err := store.UpsertMedia(m2); err != nil {
 		t.Fatalf("UpsertMedia m2 failed: %v", err)
@@ -487,9 +487,6 @@ func TestSyncChanges_MockSAPI(t *testing.T) {
 
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "token",
-		RefreshToken:  "refresh",
 		ValidationKey: "vk",
 	})
 	if err != nil {
@@ -672,7 +669,7 @@ func TestSyncChanges_UpdatesParentFolderModificationDateAndClearsTombstones(t *t
 	srv := httptest.NewServer(sapiHandler)
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "dummy"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "dummy", ValidationKey: "vk-dummy"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	changed, err := store.SyncChanges(client, false)

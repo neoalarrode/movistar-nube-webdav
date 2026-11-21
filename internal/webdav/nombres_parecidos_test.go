@@ -39,8 +39,7 @@ func o2ConFotos(t *testing.T, fotos [][2]string) (*Server, *atomic.Int32, func()
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "ok"})
 		}
 	}))
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "o2", Phone: "612345678",
-		AccessToken: "a", RefreshToken: "r", ValidationKey: "v"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "o2", ValidationKey: "v"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}

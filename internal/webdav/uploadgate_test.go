@@ -1,8 +1,8 @@
 package webdav
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -70,7 +70,7 @@ func TestQueuedUpload_PromotesToStream(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":{"folders":[{"id":100,"name":"Root","parentid":0,"magic":true}]}}`)
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,7 +206,7 @@ func TestQueuedUpload_NoRAMLeakWithSmallWrites(t *testing.T) {
 		_, _ = io.WriteString(w, `{"data":{"folders":[{"id":100,"name":"Root","parentid":0,"magic":true}]}}`)
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

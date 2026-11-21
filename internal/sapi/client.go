@@ -506,7 +506,8 @@ func (c *Client) HasCredentials() bool {
 	if c.web != nil {
 		return c.web.LoggedIn()
 	}
-	return c.cfg.RefreshToken != "" || c.cfg.AccessToken != "" || (c.cfg.JSessionID != "" && c.cfg.ValidationKey != "")
+	// Sin sesión web (solo en pruebas): la validationkey de la sesión.
+	return c.cfg.ValidationKey != ""
 }
 
 func (c *Client) appendValidationKey(rawURL string) string {
@@ -585,27 +586,13 @@ func (c *Client) processSAPIResponse(resp *http.Response) bool {
 			}
 		}
 
-		// 3. Ventana deslizante de LastRefreshDate: SAPI rechaza cabeceras oauth cuando
-		// (now - lastrefreshdate) supera expiresin (3600s). Durante copias largas (>= 1h),
-		// si las peticiones 2xx siguen siendo válidas y han pasado > 25 min, refrescamos el timestamp.
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 && c.cfg.AccessToken != "" {
-			if c.cfg.LastRefreshDate > 1750000000000 && time.Since(time.UnixMilli(c.cfg.LastRefreshDate)) > 25*time.Minute {
-				c.cfg.LastRefreshDate = time.Now().UnixMilli()
-				changed = true
-			}
-		}
 	}
 
 	if changed {
 		c.syncCookiesLocked()
 	}
-	cfgCopy := c.cfg
 	c.mu.Unlock()
 
-	if changed {
-		_ = config.SaveAccountConfig(cfgCopy)
-		logger.Log("[OAuth] ✔ Nuevas credenciales/cookies capturadas y guardadas en disco.")
-	}
 	return changed
 }
 
