@@ -1,11 +1,20 @@
+# Movistar Nube WebDAV: usa Movistar Cloud como la web oficial, con un Chromium sin
+# pantalla, y lo sirve por WebDAV.
+#
+#   docker compose up -d
+#
+# Después, abre el panel (puerto 5000) y pulsa «Abrir inicio de sesión».
+# Para compilar la imagen en local en vez de descargarla:
+#   docker build -t ghcr.io/neoalarrode/movistar-nube-webdav:latest .
 services:
-  movistar-webdav-proxy:
-    image: uniextra/movistar-webdav-proxy:latest
-    container_name: movistar-webdav-proxy
+  movistar-nube-webdav:
+    image: ghcr.io/neoalarrode/movistar-nube-webdav:latest
+    container_name: movistar-nube-webdav
     restart: unless-stopped
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:size=256m      # en RAM: con tope (sin él, Docker deja la mitad de la memoria)
+    shm_size: 256m          # Chromium usa /dev/shm
     security_opt:
       - no-new-privileges:true
     environment:
@@ -18,20 +27,18 @@ services:
       # Notificaciones de Telegram (activas desde el arranque; opcional):
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
-      # Seguridad y almacenamiento temporal (opcional):
-      # - TOKENS_ENCRYPTION_KEY=${TOKENS_ENCRYPTION_KEY:-}  # Cifra en reposo (AES-256-GCM) los tokens guardados en /app/tokens
-      # - WEBDAV_TMPDIR=/app/tmp                            # Guardar temporales grandes en disco en lugar de /tmp (requiere montar volumen)
-      # Redes y proxies inversos (opcional):
-      # - TRUSTED_PROXIES=127.0.0.1,172.18.0.0/16           # Solo se evalúan cabeceras X-Forwarded-For / X-Real-IP de estos orígenes
-      # - BRUTE_FORCE_EXCLUDED_IPS=127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16 # IPs/subredes exentas de bloqueo HTTP 429
-      # - WEBDAV_BUFFER_MB=32                               # Tamaño de buffer RAM para subidas PUT antes de hacer spool a disco (por defecto 32 MB)
+      # Opcional (valores por defecto entre paréntesis):
+      # - TOKENS_ENCRYPTION_KEY=${TOKENS_ENCRYPTION_KEY:-}  # Cifra secretos en /app/tokens con AES-256-GCM
+      # - WEBDAV_MAX_DOWNLOADS=4          # Descargas simultáneas (4 en modo web)
+      # - WEBDAV_MAX_UPLOADS=2            # Subidas simultáneas (2, como la web)
+      # - WEB_SESSION_RENEW_BEFORE=1h     # Renueva la sesión de 24 h este margen antes (requiere "No cerrar sesión")
+      # - WEB_TRASH_EMPTY_EVERY=6h        # Vacía la papelera cada X (desactivado)
     ports:
-      - "${BIND_IP:-0.0.0.0}:${WEB_PORT:-5000}:5000"      # Panel Web de gestión y logs (usa BIND_IP=127.0.0.1 para acceso solo local)
-      - "${BIND_IP:-0.0.0.0}:${WEBDAV_PORT:-5050}:8080"   # Endpoint WebDAV (Duplicati / Synology HyperBackup)
+      - "${BIND_IP:-0.0.0.0}:${WEB_PORT:-5000}:5000"
+      - "${BIND_IP:-0.0.0.0}:${WEBDAV_PORT:-5050}:8080"
     volumes:
-      - movistar_tokens:/app/tokens
-      # - /ruta/en/tu/nas/tmp:/app/tmp                      # Opcional (requiere WEBDAV_TMPDIR=/app/tmp)
+      - movistar_nube_tokens:/app/tokens   # incluye el perfil de Chromium (la sesión)
 
 volumes:
-  movistar_tokens:
-    name: movistar_webdav_tokens
+  movistar_nube_tokens:
+    name: movistar_nube_webdav_tokens
