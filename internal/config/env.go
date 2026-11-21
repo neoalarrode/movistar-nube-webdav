@@ -52,8 +52,9 @@ type AccountConfig struct {
 
 // WebSessionEnabled indica si se usa el modo web (WEB_SESSION=true): acceso a
 // Movistar Cloud con una sesión de la web oficial en un Chromium sin pantalla.
+// Es el único modo del proxy: activo salvo con WEB_SESSION=false (solo para pruebas).
 func WebSessionEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("WEB_SESSION")), "true")
+	return !strings.EqualFold(strings.TrimSpace(os.Getenv("WEB_SESSION")), "false")
 }
 
 // TransferLimits devuelve las descargas y subidas simultáneas (WEBDAV_MAX_DOWNLOADS,

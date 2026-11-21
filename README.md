@@ -76,8 +76,8 @@ Al comportarse como la web oficial, no choca con el cortafuegos de Movistar (Clo
 Necesitas Docker. La imagen está publicada para amd64 y arm64:
 
 ```bash
-curl -O https://raw.githubusercontent.com/neoalarrode/movistar-nube-webdav/main/docker-compose.web.yml
-WEBDAV_USER=usuario WEBDAV_PASSWORD=contraseña docker compose -f docker-compose.web.yml up -d
+curl -O https://raw.githubusercontent.com/neoalarrode/movistar-nube-webdav/main/docker-compose.yml
+WEBDAV_USER=usuario WEBDAV_PASSWORD=contraseña docker compose up -d
 ```
 
 1. Abre el panel en `http://IP_DEL_EQUIPO:5000` con el mismo usuario y contraseña.

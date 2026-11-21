@@ -61,7 +61,7 @@ func main() {
 	notifier.LoadStored()
 
 	if !config.WebSessionEnabled() {
-		logger.Log("[!] ⚠️ WEB_SESSION no está activado: el proxy solo funciona con la sesión web de Movistar Cloud (imagen Dockerfile.web).")
+		logger.Log("[!] ⚠️ WEB_SESSION=false: el proxy solo funciona con la sesión web de Movistar Cloud.")
 	}
 
 	// log Huella TLS (uTLS)
