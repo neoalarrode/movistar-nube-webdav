@@ -10,11 +10,11 @@ import (
 	"movistar-webdav-proxy/internal/notifier"
 )
 
-// ClientCopy es el estado que un cliente (p. ej. «Enviar a > Nube» en Windows) manda
+// ClientCopy es el estado que un cliente (p. ej. un script de copia con rclone) manda
 // de su copia con rclone: el proxy solo ve lo que le llega, el cliente sabe el total.
 type ClientCopy struct {
 	ID         string    `json:"id"`
-	Dest       string    `json:"dest"`        // carpeta de destino en claro, p. ej. «Netflix/Serie»
+	Dest       string    `json:"dest"`        // carpeta de destino en claro, p. ej. «Fotos/2024»
 	Bytes      int64     `json:"bytes"`       // copiado
 	TotalBytes int64     `json:"total_bytes"` // total conocido hasta ahora
 	Speed      float64   `json:"speed"`       // bytes/s

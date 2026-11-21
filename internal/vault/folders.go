@@ -15,7 +15,7 @@ import (
 )
 
 // Folder es la configuración de rclone de una carpeta de la raíz de la nube (p. ej.
-// «emby»): el texto tal cual de rclone.conf (crypt, chunker...) y el remoto de
+// «datos»): el texto tal cual de rclone.conf (crypt, chunker...) y el remoto de
 // arriba. Las carpetas sin configuración se sirven tal cual.
 type Folder struct {
 	Name   string `json:"name"`

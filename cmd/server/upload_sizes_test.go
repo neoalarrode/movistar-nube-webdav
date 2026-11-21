@@ -82,7 +82,7 @@ func TestUploadSizer_MatchesRealRclone(t *testing.T) {
 	}
 	// La configuración de producción (1Gi) también se interpreta.
 	prod := strings.Replace(chain, "1Mi", "1Gi", 1)
-	ch2, _ := rcloneconf.Remap(prod, "cifrada", "nube:emby", "")
+	ch2, _ := rcloneconf.Remap(prod, "cifrada", "nube:datos", "")
 	if p := newUploadSizer(ch2); p == nil || p.chunkSize != 1<<30 || !p.crypt {
 		t.Fatalf("producción: %+v", p)
 	}

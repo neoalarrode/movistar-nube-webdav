@@ -128,7 +128,7 @@ func (c *Cipher) EncryptSegment(s string) string {
 var chunkSuffix = regexp.MustCompile(`(-chunk\d{3,})(_[0-9a-z]{4,})?$`)
 
 // DecryptPath descifra cada componente de una ruta WebDAV a partir de root (la
-// carpeta del remoto crypt, p. ej. "/emby"). Lo que no se puede descifrar se deja
+// carpeta del remoto crypt, p. ej. "/datos"). Lo que no se puede descifrar se deja
 // tal cual. Devuelve "" si la ruta no está bajo root.
 func (c *Cipher) DecryptPath(p, root string) string {
 	root = "/" + strings.Trim(root, "/")

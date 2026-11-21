@@ -90,7 +90,7 @@ type Chain struct {
 
 // Remap toma el texto pegado, elige el remoto de arriba (top, o el que ningún otro
 // usa si viene vacío), sigue su cadena «remote = …» hasta la base (un WebDAV u otro
-// remoto que no esté en el texto) y la sustituye por base (p. ej. «nube:emby»).
+// remoto que no esté en el texto) y la sustituye por base (p. ej. «nube:datos»).
 // Las secciones se renombran con prefix para no chocar con otras carpetas.
 func Remap(text, top, base, prefix string) (*Chain, error) {
 	secs, err := Parse(text)

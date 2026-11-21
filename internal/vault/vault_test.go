@@ -26,7 +26,7 @@ func TestSaveLoad_EncryptedAndObscuredInput(t *testing.T) {
 	current = nil
 	mu.Unlock()
 	c, err := Load()
-	if err != nil || c == nil || c.Password != "mi clave" || c.Password2 != "sal" || c.Root != "emby" || c.NameFormat != "*-chunk###" {
+	if err != nil || c == nil || c.Password != "mi clave" || c.Password2 != "sal" || c.Root != "datos" || c.NameFormat != "*-chunk###" {
 		t.Fatalf("Load = %+v, %v", c, err)
 	}
 }
@@ -56,15 +56,15 @@ func TestFolders_SaveLoadAndMigrate(t *testing.T) {
 	t.Cleanup(func() { config.TokensDir = old })
 	t.Setenv("TOKENS_ENCRYPTION_KEY", "llave")
 
-	// Configuración antigua (una clave para «emby») → se convierte al cargar.
-	if err := Save(Crypt{Password: "clave", Password2: "sal", Root: "emby"}); err != nil {
+	// Configuración antigua (una clave para «datos») → se convierte al cargar.
+	if err := Save(Crypt{Password: "clave", Password2: "sal", Root: "datos"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := LoadFolders(); err != nil {
 		t.Fatal(err)
 	}
 	fs := Folders()
-	if len(fs) != 1 || fs[0].Name != "emby" || NamesFor(fs[0]) == nil {
+	if len(fs) != 1 || fs[0].Name != "datos" || NamesFor(fs[0]) == nil {
 		t.Fatalf("migración: %+v", fs)
 	}
 	// Otra carpeta con su propia clave pegada.

@@ -98,14 +98,14 @@ func TestPublicUpload_ShownOnceFromArrival(t *testing.T) {
 	old := Transfers
 	Transfers = NewTransferTracker(time.Minute)
 	t.Cleanup(func() { Transfers = old })
-	body, done := TrackPublicUpload("/emby/Netflix/Serie/E01.mkv", 1000, io.NopCloser(bytes.NewReader(make([]byte, 1000))))
-	uncover := CoverUploads("emby/abc/def")
+	body, done := TrackPublicUpload("/datos/Vídeos/Serie/E01.mkv", 1000, io.NopCloser(bytes.NewReader(make([]byte, 1000))))
+	uncover := CoverUploads("datos/abc/def")
 	got := Transfers.Snapshot()
-	if len(got) != 1 || got[0].Path != "/emby/Netflix/Serie/E01.mkv" || got[0].Size != 1000 {
+	if len(got) != 1 || got[0].Path != "/datos/Vídeos/Serie/E01.mkv" || got[0].Size != 1000 {
 		t.Fatalf("debe verse desde que llega: %+v", got)
 	}
 	_, _ = io.CopyN(io.Discard, body, 400)
-	_, h := trackUpload("/emby/abc/def-chunk001_x1", 1048, bytes.NewReader(nil))
+	_, h := trackUpload("/datos/abc/def-chunk001_x1", 1048, bytes.NewReader(nil))
 	if got := Transfers.Snapshot(); len(got) != 1 || got[0].Bytes != 400 {
 		t.Fatalf("el trozo cifrado no debe contarse aparte: %+v", got)
 	}
@@ -123,18 +123,18 @@ func TestPublicDownload_ShownOnce(t *testing.T) {
 	old := Transfers
 	Transfers = NewTransferTracker(time.Minute)
 	t.Cleanup(func() { Transfers = old })
-	uncover := CoverUploads("emby/abc/def")
+	uncover := CoverUploads("datos/abc/def")
 	rec := httptest.NewRecorder()
-	pw, done := TrackPublicDownload(rec, "/emby/Netflix/Serie/E01.mkv")
+	pw, done := TrackPublicDownload(rec, "/datos/Vídeos/Serie/E01.mkv")
 	pw.Header().Set("Content-Range", "bytes 0-99/1000")
 	pw.WriteHeader(http.StatusPartialContent)
 	_, _ = pw.Write(make([]byte, 100))
-	raw := &transferWriter{ResponseWriter: httptest.NewRecorder(), path: "/emby/abc/def-chunk001_x1"}
+	raw := &transferWriter{ResponseWriter: httptest.NewRecorder(), path: "/datos/abc/def-chunk001_x1"}
 	raw.Header().Set("Content-Length", "1048")
 	raw.WriteHeader(http.StatusOK)
 	_, _ = raw.Write(make([]byte, 100))
 	got := Transfers.Snapshot()
-	if len(got) != 1 || got[0].Path != "/emby/Netflix/Serie/E01.mkv" || got[0].Size != 1000 {
+	if len(got) != 1 || got[0].Path != "/datos/Vídeos/Serie/E01.mkv" || got[0].Size != 1000 {
 		t.Fatalf("debe verse una sola lectura, la del archivo en claro: %+v", got)
 	}
 	raw.done()

@@ -9,18 +9,18 @@ import (
 // Un bloque por carpeta enviada (rclone empieza sus cuentas en cada una) y el total.
 func TestCopySummary(t *testing.T) {
 	t0 := time.Now().Add(-3 * time.Hour)
-	run := &copyRun{started: t0, dests: []string{"Disney+", "Netflix"}, perDest: map[string]destTotals{
-		"Disney+": {bytes: 2 << 30, errors: 0, first: t0, last: t0.Add(2 * time.Hour)},
-		"Netflix": {bytes: 1 << 30, errors: 1, first: t0.Add(2 * time.Hour), last: t0.Add(3 * time.Hour)},
+	run := &copyRun{started: t0, dests: []string{"Fotos", "Vídeos"}, perDest: map[string]destTotals{
+		"Fotos":  {bytes: 2 << 30, errors: 0, first: t0, last: t0.Add(2 * time.Hour)},
+		"Vídeos": {bytes: 1 << 30, errors: 1, first: t0.Add(2 * time.Hour), last: t0.Add(3 * time.Hour)},
 	}}
-	run.last = ClientCopy{Dest: "Netflix", Bytes: 50, TotalBytes: 200}
+	run.last = ClientCopy{Dest: "Vídeos", Bytes: 50, TotalBytes: 200}
 	title, desc := copySummary(run, true, t0.Add(3*time.Hour))
-	for _, want := range []string{"Disney+\n2.0 GB en 2 h 0 min", "0 errores", "Netflix\n1.0 GB en 1 h 0 min", "1 errores", "Total: 3.0 GB en 3 h 0 min"} {
+	for _, want := range []string{"Fotos\n2.0 GB en 2 h 0 min", "0 errores", "Vídeos\n1.0 GB en 1 h 0 min", "1 errores", "Total: 3.0 GB en 3 h 0 min"} {
 		if title != "Copia terminada" || !strings.Contains(desc, want) {
 			t.Fatalf("falta %q en:\n%s", want, desc)
 		}
 	}
-	solo := &copyRun{started: t0, dests: []string{"Disney+"}, perDest: map[string]destTotals{"Disney+": {bytes: 1 << 30, first: t0}}}
+	solo := &copyRun{started: t0, dests: []string{"Fotos"}, perDest: map[string]destTotals{"Fotos": {bytes: 1 << 30, first: t0}}}
 	if _, d := copySummary(solo, true, t0.Add(time.Hour)); strings.Contains(d, "Total") {
 		t.Fatalf("con una sola carpeta no hace falta total:\n%s", d)
 	}
@@ -31,15 +31,15 @@ func TestCopySummary(t *testing.T) {
 	}
 	clientCopies.m["resumen"] = run
 	clientCopies.Unlock()
-	RecordUploadFailure("/emby/Netflix/Serie/T1/cap03.mkv", "409 Conflict")
+	RecordUploadFailure("/datos/Vídeos/Serie/T1/cap03.mkv", "409 Conflict")
 	clientCopies.Lock()
 	delete(clientCopies.m, "resumen")
 	clientCopies.Unlock()
 	if _, d := copySummary(run, true, t0.Add(3*time.Hour)); !strings.Contains(d, "1 errores\n⚠️ Serie/T1/cap03.mkv: 409 Conflict") {
-		t.Fatalf("el fallo debe ir en el bloque de Netflix:\n%s", d)
+		t.Fatalf("el fallo debe ir en el bloque de Vídeos:\n%s", d)
 	}
 	title, desc = copySummary(run, false, t0.Add(3*time.Hour))
-	if title != "Copia interrumpida" || !strings.Contains(desc, "25% de «Netflix»") {
+	if title != "Copia interrumpida" || !strings.Contains(desc, "25% de «Vídeos»") {
 		t.Fatalf("%s | %s", title, desc)
 	}
 }

@@ -1,17 +1,15 @@
-# Modo web (opcional): el proxy usa Movistar Cloud como la web oficial, con un
-# Chromium sin pantalla. Para cuando el inicio de sesión del cliente de escritorio
-# (OAuth) no funciona o CloudFront lo bloquea. Ver "Modo web" en el README.
+# Movistar Nube WebDAV: usa Movistar Cloud como la web oficial, con un Chromium sin
+# pantalla, y lo sirve por WebDAV.
 #
-#   docker compose -f docker-compose.web.yml up -d --build
+#   docker compose -f docker-compose.web.yml up -d
 #
-# Después, abre el panel (puerto 5000) y pulsa "Abrir inicio de sesión".
+# Después, abre el panel (puerto 5000) y pulsa «Abrir inicio de sesión».
+# Para compilar la imagen en local en vez de descargarla:
+#   docker build -f Dockerfile.web -t ghcr.io/neoalarrode/movistar-nube-webdav:latest .
 services:
-  movistar-webdav-proxy-web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    image: movistar-webdav-proxy:web
-    container_name: movistar-webdav-proxy-web
+  movistar-nube-webdav:
+    image: ghcr.io/neoalarrode/movistar-nube-webdav:latest
+    container_name: movistar-nube-webdav
     restart: unless-stopped
     read_only: true
     tmpfs:
@@ -39,8 +37,8 @@ services:
       - "${BIND_IP:-0.0.0.0}:${WEB_PORT:-5000}:5000"
       - "${BIND_IP:-0.0.0.0}:${WEBDAV_PORT:-5050}:8080"
     volumes:
-      - movistar_tokens_web:/app/tokens   # incluye el perfil de Chromium (la sesión)
+      - movistar_nube_tokens:/app/tokens   # incluye el perfil de Chromium (la sesión)
 
 volumes:
-  movistar_tokens_web:
-    name: movistar_webdav_tokens_web
+  movistar_nube_tokens:
+    name: movistar_nube_webdav_tokens

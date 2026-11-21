@@ -157,13 +157,13 @@ func setupAutoChunk(svc *rclonesvc.Service) {
 }
 
 // cloudFolderLister lista, con sus nombres en claro, las carpetas que hay dentro de
-// la carpeta de la copia en la nube (COPY_CLOUD_FOLDER, por defecto «emby»): las
+// la carpeta de la copia en la nube (COPY_CLOUD_FOLDER, por defecto «datos»): las
 // bibliotecas que muestra el panel. Sale del listado del proxy, sin pedir nada nuevo.
 func cloudFolderLister(srv *webdav.Server) func() []string {
 	return func() []string {
 		folder := strings.Trim(strings.TrimSpace(os.Getenv("COPY_CLOUD_FOLDER")), "/")
 		if folder == "" {
-			folder = "emby"
+			folder = "datos"
 		}
 		fs := srv.FS()
 		if fs == nil {

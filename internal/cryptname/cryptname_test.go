@@ -24,11 +24,11 @@ func TestDecryptSegment_RcloneVectors(t *testing.T) {
 
 func TestDecryptPath_WithChunkSuffix(t *testing.T) {
 	c, _ := New("contraseña", "sal")
-	enc := "/emby/" + c.EncryptSegment("Series") + "/" + c.EncryptSegment("T1") + "/" + c.EncryptSegment("E01.mkv") + "-chunk002_ab12cd"
-	if got := c.DecryptPath(enc, "/emby"); got != "Series/T1/E01.mkv (chunk002)" {
+	enc := "/datos/" + c.EncryptSegment("Series") + "/" + c.EncryptSegment("T1") + "/" + c.EncryptSegment("E01.mkv") + "-chunk002_ab12cd"
+	if got := c.DecryptPath(enc, "/datos"); got != "Series/T1/E01.mkv (chunk002)" {
 		t.Errorf("DecryptPath = %q", got)
 	}
-	if got := c.DecryptPath("/otra/cosa", "/emby"); got != "" {
+	if got := c.DecryptPath("/otra/cosa", "/datos"); got != "" {
 		t.Errorf("fuera de la raíz debe dar vacío: %q", got)
 	}
 }

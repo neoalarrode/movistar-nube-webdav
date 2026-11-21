@@ -74,7 +74,7 @@ func TestCopySignature_IncludesProxyActivity(t *testing.T) {
 	t.Cleanup(func() { webdav.Transfers = old })
 	s := &Server{}
 	before := s.copySignature()
-	h := webdav.Transfers.Start("upload", "/emby/a.mkv", 10<<20, 0)
+	h := webdav.Transfers.Start("upload", "/datos/a.mkv", 10<<20, 0)
 	defer h.Done()
 	if s.copySignature() == before {
 		t.Fatal("una subida nueva debe cambiar la señal")
