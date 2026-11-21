@@ -538,9 +538,6 @@ func NewMovistarFS(client *sapi.Client, metaStores ...*cache.MetadataStore) *Mov
 		syncInterval:      config.GetSyncInterval(),
 	}
 	fs.emptyFileManager = NewEmptyFileManager(fs)
-	if client != nil {
-		client.SetMediaRefreshHook(fs.applyMediaRefresh)
-	}
 	if ms != nil {
 		ms.SetTombstoneCleaner(fs.ClearTombstone)
 		ms.SetTombstoneFilter(fs.HasTombstones)
@@ -551,64 +548,6 @@ func NewMovistarFS(client *sapi.Client, metaStores ...*cache.MetadataStore) *Mov
 		}()
 	}
 	return fs
-}
-
-// applyMediaRefresh guarda lo que devuelve la relectura tras subir (como la app): la
-// URL de descarga firmada, en la caché de subidas recientes y en la base de
-// metadatos. Así la primera descarga no pasa por la URL por defecto, que O2 rechaza
-// con COM-1005. Si el archivo cambió o se borró entretanto, no se toca.
-func (mfs *MovistarFS) applyMediaRefresh(r sapi.MediaRefresh) {
-	if mfs == nil || r.ID == "" || r.URL == "" {
-		return
-	}
-	folderID := int64(-1)
-	if ms := mfs.MetadataStore(); ms != nil {
-		if m, err := ms.GetMediaByID(r.ID); err == nil && m != nil {
-			if r.UploadETag != "" && m.ETag != "" && m.ETag != r.UploadETag {
-				return // el archivo cambió después de esa subida
-			}
-			m.URL = r.URL
-			if r.ETag != "" {
-				m.ETag = r.ETag
-			}
-			logMetaErr("UpsertMedia", ms.UpsertMedia(*m))
-			folderID = m.FolderID
-		}
-	}
-	stored := folderID >= 0
-	mfs.cacheMu.Lock()
-	for _, mem := range mfs.uploadCache {
-		if mem.ID == r.ID {
-			mem.URL = r.URL
-			mem.URLConfirmed = true
-			mem.URLLookupFailedAt = time.Time{}
-			folderID = mem.FolderID
-		}
-	}
-	// los listados en memoria también: sin base de metadatos no hay de dónde recargarla
-	for _, cm := range mfs.mediaCache {
-		for i := range cm.media {
-			if cm.media[i].ID == r.ID {
-				cm.media[i].URL = r.URL
-			}
-		}
-		for k, m := range cm.byExact {
-			if m.ID == r.ID {
-				m.URL = r.URL
-				cm.byExact[k] = m
-			}
-		}
-		for k, m := range cm.byLower {
-			if m.ID == r.ID {
-				m.URL = r.URL
-				cm.byLower[k] = m
-			}
-		}
-	}
-	mfs.cacheMu.Unlock()
-	if stored {
-		mfs.InvalidateCache(folderID) // se recarga desde la base, ya con la URL
-	}
 }
 
 // cachedDownloadURL: la URL de descarga que el proxy conoce para un ID (base de
@@ -666,10 +605,6 @@ func (mfs *MovistarFS) SetMetadataStore(ms *cache.MetadataStore) {
 		}
 	}
 }
-
-// realEmptyFiles: subir de verdad los archivos de 0 bytes era cosa de la subida de la
-// app oficial; el modo web los emula. Se retira junto con ese código (issue #1).
-func (mfs *MovistarFS) realEmptyFiles() bool { return false }
 
 // BootstrapEmptyFiles carga desde la nube el manifiesto de archivos vacíos emulados hacia SQLite.
 func (mfs *MovistarFS) BootstrapEmptyFiles() {
@@ -1822,10 +1757,7 @@ func (mfs *MovistarFS) OpenFile(ctx context.Context, name string, flag int, perm
 		// La subida no siempre devuelve URL de descarga y SAPI tarda unos segundos en
 		// indexar el archivo recién subido; esperamos brevemente en ambos modos a que
 		// GetMediaByID devuelva la URL firmada en lugar de caer en /media/content?id=.
-		r.resolveURL = func() string {
-			mfs.waitUploadSettled(ctx, mem.ID, mem.Name)
-			return mfs.waitForDownloadURL(mem)
-		}
+		r.resolveURL = func() string { return mfs.waitForDownloadURL(mem) }
 		return r, nil
 	}
 	mfs.cacheMu.RUnlock()
@@ -1857,36 +1789,7 @@ func (mfs *MovistarFS) OpenFile(ctx context.Context, name string, flag int, perm
 			}), nil
 		}
 	}
-	r := NewWebDAVFileReader(mfs, cleanPath, *mediaInfo)
-	if mfs.client != nil && mfs.client.UploadSettling(mediaInfo.ID) {
-		id, name := mediaInfo.ID, mediaInfo.Name
-		r.resolveURL = func() string {
-			if mfs.waitUploadSettled(ctx, id, name) {
-				return mfs.cachedDownloadURL(id)
-			}
-			return ""
-		}
-	}
-	return r, nil
-}
-
-// waitUploadSettled: un archivo recién subido no se puede descargar hasta que O2
-// termina de validarlo (antes, la URL por defecto da COM-1005 y la firmada aún no
-// existe). La descarga espera a que termine la validación y la relectura, sin límite
-// propio: mientras el cliente siga conectado.
-func (mfs *MovistarFS) waitUploadSettled(ctx context.Context, id, name string) bool {
-	if mfs.client == nil || id == "" || !mfs.client.UploadSettling(id) {
-		return false
-	}
-	logger.Log("[WebDAV] ⏳ '%s' aún se está validando en O2: la descarga espera a que termine...", name)
-	start := time.Now()
-	ok := mfs.client.WaitUploadSettled(ctx, id)
-	if ok {
-		logger.Log("[WebDAV] ✔ '%s' validado tras %s: se descarga", name, time.Since(start).Round(time.Second))
-	} else if ctx.Err() != nil {
-		logger.Log("[WebDAV] ⚠️ El cliente dejó de esperar a '%s' (%s en validación)", name, time.Since(start).Round(time.Second))
-	}
-	return ok
+	return NewWebDAVFileReader(mfs, cleanPath, *mediaInfo), nil
 }
 
 // urlLookupErrorBackoff es el tiempo durante el que no se vuelve a consultar la URL de
@@ -2153,7 +2056,7 @@ func (mfs *MovistarFS) Rename(ctx context.Context, oldName, newName string) erro
 	logger.Log("[WebDAV] 🔄 Renombrando: '%s' -> '%s'...", logName(oldClean), logName(newClean))
 
 	if isF && oldFolder != nil {
-		err := mfs.client.UpdateFolderItem(*oldFolder, newBaseName, parentFolder.ID)
+		err := mfs.client.UpdateFolder(oldFolder.ID, newBaseName, parentFolder.ID)
 		if err != nil {
 			return err
 		}
@@ -2283,7 +2186,7 @@ func (mfs *MovistarFS) Rename(ctx context.Context, oldName, newName string) erro
 					}))
 				}
 			} else {
-				if err := mfs.client.UpdateMediaItem(*oldMedia, newBaseName, parentFolder.ID); err != nil {
+				if err := mfs.client.UpdateMedia(oldMedia.ID, oldMedia.Name, newBaseName, parentFolder.ID); err != nil {
 					return err
 				}
 				// Borrar destino previo sólo tras completar UpdateMedia con éxito
@@ -2655,9 +2558,6 @@ type WebDAVFileWriter struct {
 	queueRAM       int64
 	queueDisk      int64
 	queuedMark     *TransferHandle
-	// pending: subida en flujo cortada a medias; el reintento desde disco continúa
-	// sobre ese ID (perfil desktop, como la app oficial) en lugar de crear otro.
-	pending *sapi.UploadInterruptedError
 }
 
 func (w *WebDAVFileWriter) isBulk() bool { return w.guard != nil && w.guard.bulk }
@@ -2815,13 +2715,8 @@ func (w *WebDAVFileWriter) abortStream(err error) {
 		w.streamPW = nil
 	}
 	if w.streamDone != nil {
-		res := <-w.streamDone
+		<-w.streamDone
 		w.streamDone = nil
-		w.mfs.client.DiscardInterruptedUpload(res.err, w.name)
-	}
-	if w.pending != nil {
-		w.mfs.client.DiscardInterruptedUpload(w.pending, w.name)
-		w.pending = nil
 	}
 	w.releasePathLock()
 }
@@ -3138,7 +3033,7 @@ func (w *WebDAVFileWriter) Close() error {
 	// Se emulan en SQLite y memoria, sin subir a la nube: los archivos en carpetas
 	// virtuales heredadas, los vacíos de bloqueo y control (viven segundos) y, si no se
 	// suben los vacíos de verdad (realEmptyFiles), todos los de 0 bytes.
-	if w.parentFolderID < 0 || (w.size == 0 && (isControlOrLockFile(w.path) || !w.mfs.realEmptyFiles())) {
+	if w.parentFolderID < 0 || w.size == 0 {
 		w.cleanupTemp()
 		now := time.Now()
 		modTime := now
@@ -3237,10 +3132,6 @@ func (w *WebDAVFileWriter) Close() error {
 			}
 			return res.err
 		} else {
-			var ie *sapi.UploadInterruptedError
-			if errors.As(res.err, &ie) && ie.MediaID != "" {
-				w.pending = ie
-			}
 			logger.Log("[WebDAV] ⚠️ Subida en flujo requirió reintento desde disco para '%s': %v", w.name, res.err)
 		}
 	}
@@ -3274,19 +3165,7 @@ func (w *WebDAVFileWriter) Close() error {
 
 		mimeType := mime.TypeByExtension(filepath.Ext(w.name))
 		body, tr := trackUpload(w.path, w.size, reader)
-		if w.pending != nil && w.tmpFile != nil {
-			ctx := w.ctx
-			if ctx == nil {
-				ctx = context.Background()
-			}
-			media, err = w.mfs.client.UploadFileContinueCtx(ctx, w.pending.MediaID, w.pending.New, w.name, body, w.size, w.parentFolderID, mimeType, w.modTime)
-		} else {
-			if w.pending != nil {
-				w.mfs.client.DiscardInterruptedUpload(w.pending, w.name)
-			}
-			media, err = w.upload(body, w.size, mimeType)
-		}
-		w.pending = nil
+		media, err = w.upload(body, w.size, mimeType)
 		tr.Done()
 		<-globalTransferSem
 		uploads.release()
@@ -3837,11 +3716,7 @@ func (mfs *MovistarFS) autoHealHyperBackupWriter(dirPath string, folderID int64,
 	}
 
 	if healed && mfs.emptyFileManager != nil {
-		if mfs.realEmptyFiles() {
-			mfs.emptyFileManager.startMigration() // se sube a la nube como cualquier vacío
-		} else {
-			mfs.emptyFileManager.ScheduleSave()
-		}
+		mfs.emptyFileManager.ScheduleSave()
 	}
 	return vFiles
 }

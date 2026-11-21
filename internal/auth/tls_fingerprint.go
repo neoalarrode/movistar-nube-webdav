@@ -21,9 +21,8 @@ import (
 // HTTP/2 contra CloudFront; la huella JA3/JA4 que emite crypto/tls de Go es
 // catalogada como cliente automatizado por AWS WAF Bot Control (403). Por eso se
 // imita un navegador convencional en lugar de usar crypto/tls. Configurable con
-// UTLS_CLIENT_HELLO para pruebas A/B (o2, chrome_auto, firefox_auto, safari_auto, ios,
-// android, edge, chrome_120, golang, randomized). En el perfil desktop la huella por
-// defecto es la del cliente oficial de Windows (HelloO2Windows).
+// UTLS_CLIENT_HELLO para pruebas A/B (chrome_auto, firefox_auto, safari_auto, ios,
+// android, edge, chrome_120, golang, randomized).
 func clientHelloIDFromEnv() utls.ClientHelloID {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv("UTLS_CLIENT_HELLO"))) {
 	case "firefox", "firefox_auto":
@@ -44,73 +43,15 @@ func clientHelloIDFromEnv() utls.ClientHelloID {
 		return utls.HelloGolang
 	case "randomized":
 		return utls.HelloRandomized
-	case "o2", "o2_windows", "openssl":
-		return HelloO2Windows
 	default:
 		return utls.HelloChrome_Auto
 	}
-}
-
-// HelloO2Windows es el ClientHello del cliente oficial de Windows de O2
-// (O2 Cloud.exe 32.1.3, Qt 5 + OpenSSL 1.1.1), capturado en claro con tcpdump
-// (sin MITM) el 17/11/2026: JA3 57fbe0aefee44901190849b0e877a5e1, sin ALPN
-// (el servidor responde en HTTP/1.1). Es la huella por defecto del perfil desktop.
-var HelloO2Windows = utls.ClientHelloID{Client: "O2Windows", Version: "32.1.3"}
-
-// o2WindowsSpec reproduce ese ClientHello extensión a extensión y en el mismo orden.
-func o2WindowsSpec() utls.ClientHelloSpec {
-	return utls.ClientHelloSpec{
-		TLSVersMin: utls.VersionTLS10,
-		TLSVersMax: utls.VersionTLS13,
-		CipherSuites: []uint16{
-			0x1302, 0x1303, 0x1301, 0xc02c, 0xc030, 0x009f, 0xcca9, 0xcca8, 0xccaa, 0xc02b,
-			0xc02f, 0x009e, 0xc024, 0xc028, 0x006b, 0xc023, 0xc027, 0x0067, 0xc00a, 0xc014,
-			0x0039, 0xc009, 0xc013, 0x0033, 0x00ad, 0x00ab, 0xccae, 0xccad, 0xccac, 0x009d,
-			0x00a9, 0xccab, 0x00ac, 0x00aa, 0x009c, 0x00a8, 0x003d, 0x003c, 0xc038, 0xc036,
-			0x00b7, 0x00b3, 0x0095, 0x0091, 0x0035, 0x00af, 0x008d, 0xc037, 0xc035, 0x00b6,
-			0x00b2, 0x0094, 0x0090, 0x002f, 0x00ae, 0x008c, 0x00ff,
-		},
-		CompressionMethods: []byte{0},
-		Extensions: []utls.TLSExtension{
-			&utls.SNIExtension{},
-			&utls.SupportedPointsExtension{SupportedPoints: []byte{0, 1, 2}},
-			&utls.SupportedCurvesExtension{Curves: []utls.CurveID{
-				utls.X25519, utls.CurveP256, utls.CurveID(0x001e), utls.CurveP521, utls.CurveP384,
-			}},
-			&utls.SessionTicketExtension{},
-			&utls.GenericExtension{Id: 22}, // encrypt_then_mac
-			&utls.ExtendedMasterSecretExtension{},
-			&utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: []utls.SignatureScheme{
-				0x0403, 0x0503, 0x0603, 0x0807, 0x0808, 0x0809, 0x080a, 0x080b, 0x0804, 0x0805,
-				0x0806, 0x0401, 0x0501, 0x0601, 0x0303, 0x0203, 0x0301, 0x0201, 0x0302, 0x0202,
-				0x0402, 0x0502, 0x0602,
-			}},
-			&utls.SupportedVersionsExtension{Versions: []uint16{
-				utls.VersionTLS13, utls.VersionTLS12, utls.VersionTLS11, utls.VersionTLS10,
-			}},
-			&utls.PSKKeyExchangeModesExtension{Modes: []uint8{utls.PskModeDHE}},
-			&utls.KeyShareExtension{KeyShares: []utls.KeyShare{{Group: utls.X25519}}},
-			&utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle},
-		},
-	}
-}
-
-// helloSpecFor devuelve la especificación a medida de las huellas propias
-// (HelloO2Windows); ok es false para los perfiles de uTLS.
-func helloSpecFor(helloID utls.ClientHelloID) (utls.ClientHelloSpec, bool) {
-	if helloID == HelloO2Windows {
-		return o2WindowsSpec(), true
-	}
-	return utls.ClientHelloSpec{}, false
 }
 
 // newUClient crea la UConn para helloID, aplicando la especificación a medida si
 // la huella es propia.
 func newUClient(conn net.Conn, cfg *utls.Config, helloID utls.ClientHelloID) (*utls.UConn, error) {
 	spec, custom := chachaFirstSpec(helloID) // sin AES por hardware: ChaCha20 delante (ver preferChaCha)
-	if !custom {
-		spec, custom = helloSpecFor(helloID)
-	}
 	if !custom {
 		return utls.UClient(conn, cfg, helloID), nil
 	}
@@ -175,13 +116,6 @@ func dialTLSContextWithUTLSHTTP1(ctx context.Context, network, addr string) (net
 // http1OnlySpec devuelve el ClientHello del perfil indicado con la extensión ALPN
 // reducida a "http/1.1".
 func http1OnlySpec(helloID utls.ClientHelloID) (utls.ClientHelloSpec, error) {
-	if spec, ok := helloSpecFor(helloID); ok {
-		// Sin ALPN, como el cliente oficial: el servidor responde en HTTP/1.1.
-		if preferChaCha() {
-			spec.CipherSuites = chachaFirst(spec.CipherSuites)
-		}
-		return spec, nil
-	}
 	spec, err := utls.UTLSIdToSpec(helloID)
 	if err != nil {
 		return spec, err
@@ -251,12 +185,9 @@ func chachaFirstSpec(helloID utls.ClientHelloID) (utls.ClientHelloSpec, bool) {
 	if !preferChaCha() {
 		return utls.ClientHelloSpec{}, false
 	}
-	spec, ok := helloSpecFor(helloID)
-	if !ok {
-		var err error
-		if spec, err = utls.UTLSIdToSpec(helloID); err != nil {
-			return spec, false
-		}
+	spec, err := utls.UTLSIdToSpec(helloID)
+	if err != nil {
+		return spec, false
 	}
 	spec.CipherSuites = chachaFirst(spec.CipherSuites)
 	return spec, true
