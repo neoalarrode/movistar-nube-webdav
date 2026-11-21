@@ -194,8 +194,7 @@ func newReuploadServer(t *testing.T, f *reuploadO2) *Server {
 	mock := newShimServer(f.handler(t))
 	t.Cleanup(mock.Close)
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "movistar", Phone: "612345678",
-		AccessToken: "a", RefreshToken: "r", ValidationKey: "vk",
+		Provider: "movistar", ValidationKey: "vk",
 	})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"movistar-webdav-proxy/internal/auth"
 	"movistar-webdav-proxy/internal/config"
@@ -71,14 +70,9 @@ func TestCI_CloudFrontWAF_RejectsLegacyFolDeviceIDAndBadUserAgent(t *testing.T) 
 	defer server.Close()
 
 	client, err := NewClient(config.AccountConfig{
-		Provider:        "movistar",
-		Phone:           "612345678",
-		AccessToken:     "valid-token",
-		RefreshToken:    "valid-refresh",
-		DeviceID:        "fol-xShd2lUKwcsWLi7YPhSfnA==",
-		DeviceName:      "PC Windows",
-		LastRefreshDate: time.Now().UnixMilli(),
-		ExpiresIn:       "3600",
+		Provider:   "movistar",
+		DeviceID:   "fol-xShd2lUKwcsWLi7YPhSfnA==",
+		DeviceName: "PC Windows",
 	})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)

@@ -38,9 +38,6 @@ func servidorQueCuentaSubidas(t *testing.T) (*Server, *atomic.Int32, func()) {
 	}))
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

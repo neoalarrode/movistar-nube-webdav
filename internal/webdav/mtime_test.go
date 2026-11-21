@@ -90,9 +90,6 @@ func setupMtimeServer(t *testing.T) (*Server, func() []map[string]interface{}) {
 	t.Cleanup(mock.Close)
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

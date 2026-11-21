@@ -26,16 +26,8 @@ func setupTestWebUI(t *testing.T, authCfg config.AuthConfig) (http.Handler, stri
 	t.Cleanup(func() { config.TokensDir = origTokensDir })
 
 	cfg := config.AccountConfig{
-		Provider:         "movistar",
-		Phone:            "612345678",
-		DeviceID:         "fol-secretdevice1234",
-		RefreshToken:     "refresh-secret-token",
-		AccessToken:      "access-secret-token",
-		TelegramBotToken: "123456789:SecretBotTokenValueXYZ",
-		TelegramChatID:   "-100123456",
-	}
-	if err := config.SaveAccountConfig(cfg); err != nil {
-		t.Fatalf("SaveAccountConfig failed: %v", err)
+		Provider: "movistar",
+		DeviceID: "fol-secretdevice1234",
 	}
 
 	client, err := sapi.NewClient(cfg)

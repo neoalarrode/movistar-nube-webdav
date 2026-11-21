@@ -56,7 +56,7 @@ func fakeSaveMetadataCode(t *testing.T, code string) (*Client, func() []string) 
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": map[string]interface{}{"code": code, "message": "The file extension or the format is not supported."}})
 	}))
 	t.Cleanup(srv.Close)
-	c, err := NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -101,7 +101,7 @@ func fakeSaveMetadata(t *testing.T, validating int, okKinds ...string) (*Client,
 	mediaMoveRetryDelay = time.Millisecond
 	t.Cleanup(func() { mediaMoveRetryDelay = old })
 
-	c, err := NewClient(config.AccountConfig{Provider: "movistar", Phone: "612345678", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}

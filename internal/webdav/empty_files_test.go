@@ -161,9 +161,6 @@ func setupTestWebDAVServerWithDB(t *testing.T) (*Server, *cache.MetadataStore, s
 
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -528,8 +525,6 @@ func TestVirtualEmptyFiles_BootstrapAfterDelayedSync(t *testing.T) {
 
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -570,8 +565,6 @@ func TestVirtualEmptyFiles_BootstrapAfterDelayedSync(t *testing.T) {
 func TestAutoHealHyperBackupWriter_WithoutSeqMapping(t *testing.T) {
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -627,7 +620,7 @@ func TestEmptyFiles_BootstrapKeepsUnsyncedLocalState(t *testing.T) {
 		}
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -675,7 +668,7 @@ func TestEmptyFiles_ManifestNotReuploadedWhenUnchanged(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{}}`))
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -751,7 +744,7 @@ func TestEmptyFiles_FreshDatabaseLoadsCloudManifestEvenIfDirty(t *testing.T) {
 		}
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", AccessToken: "a", RefreshToken: "r", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

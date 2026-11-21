@@ -51,8 +51,7 @@ func TestNormalDownload_EmptyBodyRefreshesURL(t *testing.T) {
 	defer srv.Close()
 
 	client, err := NewClient(config.AccountConfig{
-		Provider:    "movistar",
-		AccessToken: "test-token",
+		Provider: "movistar",
 	})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)

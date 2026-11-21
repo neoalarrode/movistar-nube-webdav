@@ -102,9 +102,6 @@ func TestControlLockVirtualEmulation(t *testing.T) {
 
 	sapiClient, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "vk",
 	})
 	if err != nil {
@@ -296,9 +293,6 @@ func TestAutoHealHyperBackupWriterCinfo(t *testing.T) {
 
 	sapiClient, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "vk",
 	})
 	if err != nil {

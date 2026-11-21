@@ -13,9 +13,6 @@ import (
 func TestNewClient_MaxIdleConnsPerHost(t *testing.T) {
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -61,9 +58,6 @@ func TestDoRequest_429Retry(t *testing.T) {
 
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -108,9 +102,6 @@ func TestCreateFolder_FOL1035_LimitError(t *testing.T) {
 
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -137,9 +128,6 @@ func TestCreateFolder_ZeroID_Error(t *testing.T) {
 
 	client, err := NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

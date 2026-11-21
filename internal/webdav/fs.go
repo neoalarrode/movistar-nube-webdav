@@ -775,7 +775,7 @@ func (mfs *MovistarFS) MaybeTriggerSync() {
 		return
 	}
 	cfg := client.GetConfig()
-	if cfg.RefreshToken == "" && cfg.AccessToken == "" && cfg.ValidationKey == "" {
+	if cfg.ValidationKey == "" {
 		return
 	}
 

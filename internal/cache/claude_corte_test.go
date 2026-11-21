@@ -70,7 +70,7 @@ func TestClaude_SincronizacionInicialCortada(t *testing.T) {
 	})
 	srv := httptest.NewServer(h)
 	defer srv.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "o2", Phone: "600000000", AccessToken: "t", RefreshToken: "r", ValidationKey: "v"})
+	client, err := sapi.NewClient(config.AccountConfig{Provider: "o2", ValidationKey: "v"})
 	if err != nil {
 		t.Fatal(err)
 	}

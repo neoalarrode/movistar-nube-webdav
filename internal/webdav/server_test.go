@@ -120,9 +120,6 @@ func setupTestWebDAVServer(t *testing.T, authCfg config.AuthConfig) (*Server, fu
 	mockSAPI := newMockSAPIServer(t)
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -506,7 +503,6 @@ func TestWebDAV_NTLM_Offer_Selective(t *testing.T) {
 	}
 }
 
-
 func TestWebDAV_ProppatchDoesNotTruncateUploadedFile(t *testing.T) {
 	srv, subidas, cerrar := servidorQueCuentaSubidas(t)
 	defer cerrar()
@@ -655,9 +651,6 @@ func TestWebDAV_SmallFileDownloadCachedInMemory(t *testing.T) {
 
 	client, err := sapi.NewClient(config.AccountConfig{
 		Provider:      "movistar",
-		Phone:         "612345678",
-		AccessToken:   "test-access",
-		RefreshToken:  "test-refresh",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

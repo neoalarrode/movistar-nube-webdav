@@ -293,7 +293,7 @@ func TestMovistarFS_MaybeTriggerSync_OnPropfind(t *testing.T) {
 	srv := newShimServer(sapiHandler)
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "active_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "active_token", ValidationKey: "vk-active_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	davServer := NewServerWithAuth(client, config.AuthConfig{AuthDisabled: true}, ms)
@@ -339,7 +339,7 @@ func TestMetadataStore_ConcurrentSyncChanges(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "test_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "test_token", ValidationKey: "vk-test_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	const numCallers = 10
@@ -383,7 +383,7 @@ func TestMetadataStore_SyncChanges_AdvancesCursorOnEmptyChanges(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "test_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "test_token", ValidationKey: "vk-test_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	changed, err := ms.SyncChanges(client, false)
@@ -650,7 +650,7 @@ func TestMovistarFS_SAPIFallback_WithCooldown(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "active_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "active_token", ValidationKey: "vk-active_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	fs := NewMovistarFS(client, ms)
@@ -731,7 +731,7 @@ func TestMovistarFS_Rename_AtomicDestination(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "active_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "active_token", ValidationKey: "vk-active_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	fs := NewMovistarFS(client, ms)
@@ -793,7 +793,7 @@ func TestMovistarFS_RemoveAll_And_Rename_WithSQLite(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client, _ := sapi.NewClient(config.AccountConfig{RefreshToken: "active_token"})
+	client, _ := sapi.NewClient(config.AccountConfig{JSessionID: "active_token", ValidationKey: "vk-active_token"})
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
 	fs := NewMovistarFS(client, ms)

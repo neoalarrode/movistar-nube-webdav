@@ -109,7 +109,7 @@ func NewServerWithAuth(client *sapi.Client, webdavServer *webdav.Server, authCfg
 		client.OnSessionExpired = func(err error) {
 			if s.notifier != nil && s.notifier.IsConfigured() {
 				cfg := client.GetConfig()
-				_ = s.notifier.SendSessionExpiredAlert(cfg.Provider, cfg.Phone, err.Error())
+				_ = s.notifier.SendSessionExpiredAlert(cfg.Provider, "", err.Error())
 			}
 		}
 	}
@@ -731,14 +731,12 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	cfg := s.client.GetConfig()
 	status := "stopped"
 	if s.IsRunning() {
 		status = "running"
 	}
 	resp := map[string]interface{}{
 		"status":           status,
-		"phone":            logger.Mask(cfg.Phone),
 		"auth_enabled":     s.authCfg.IsEnabled(),
 		"webdav_host_port": webDAVHostPort(),
 		"version":          config.Version,
