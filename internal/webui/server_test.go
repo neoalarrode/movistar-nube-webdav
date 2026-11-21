@@ -7,14 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"movistar-webdav-proxy/internal/config"
+	"movistar-webdav-proxy/internal/notifier"
 	"movistar-webdav-proxy/internal/sapi"
 	"movistar-webdav-proxy/internal/updater"
 	"movistar-webdav-proxy/internal/webdav"
@@ -115,7 +113,7 @@ func TestWebUI_MethodsCSRFAndSecretsMasking(t *testing.T) {
 	handler, _ := setupTestWebUI(t, config.AuthConfig{AuthDisabled: true})
 
 	// 1. Métodos GET en endpoints mutadores -> 405 Method Not Allowed
-	postOnlyEndpoints := []string{"/start", "/stop", "/verify_phone", "/start_login", "/complete_login", "/save_telegram", "/test_telegram", "/unlink"}
+	postOnlyEndpoints := []string{"/start", "/stop", "/save_telegram", "/test_telegram"}
 	for _, ep := range postOnlyEndpoints {
 		req := httptest.NewRequest("GET", ep, nil)
 		rec := httptest.NewRecorder()
@@ -136,55 +134,26 @@ func TestWebUI_MethodsCSRFAndSecretsMasking(t *testing.T) {
 		t.Errorf("expected 403 Forbidden on cross-origin POST, got %d", csrfRec.Code)
 	}
 
-	// 3. POST /verify_phone NO debe devolver telegram_bot_token en claro
-	vpReq := httptest.NewRequest("POST", "/verify_phone", strings.NewReader(`{"phone":"612345678"}`))
-	vpReq.Host = "localhost:5000"
-	vpReq.Header.Set("Origin", "http://localhost:5000")
-	vpReq.Header.Set("Content-Type", "application/json")
-	vpRec := httptest.NewRecorder()
-	handler.ServeHTTP(vpRec, vpReq)
-	if vpRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on /verify_phone, got %d: %s", vpRec.Code, vpRec.Body.String())
-	}
-	rawBody := vpRec.Body.String()
-	if strings.Contains(rawBody, "SecretBotTokenValueXYZ") || strings.Contains(rawBody, `"telegram_bot_token"`) {
-		t.Errorf("/verify_phone leaked plaintext telegram_bot_token: %s", rawBody)
-	}
-
-	var vpData map[string]interface{}
-	_ = json.Unmarshal(vpRec.Body.Bytes(), &vpData)
-	if vpData["telegram_configured"] != true {
-		t.Errorf("expected telegram_configured=true, got %v", vpData["telegram_configured"])
-	}
-
-	// 4. Guardar en /save_telegram dejando bot_token vacío conserva el token existente sin sobrescribirlo
-	saveReq := httptest.NewRequest("POST", "/save_telegram", strings.NewReader(`{"phone":"612345678","bot_token":"","chat_id":"-100999999"}`))
+	// 4. Guardar en /save_telegram dejando bot_token vacío conserva el token activo y cambia el chat
+	notifier.Default.UpdateCredentials("123456789:SecretBotTokenValueXYZ", "-100123456")
+	saveReq := httptest.NewRequest("POST", "/save_telegram", strings.NewReader(`{"bot_token":"","chat_id":"-100999999"}`))
 	saveReq.Header.Set("Content-Type", "application/json")
 	saveRec := httptest.NewRecorder()
 	handler.ServeHTTP(saveRec, saveReq)
 	if saveRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on /save_telegram, got %d: %s", saveRec.Code, saveRec.Body.String())
 	}
-	reloaded := config.LoadAccountConfig("612345678")
-	if reloaded.TelegramBotToken != "123456789:SecretBotTokenValueXYZ" || reloaded.TelegramChatID != "-100999999" {
-		t.Errorf("expected existing bot token to be preserved and chat_id updated, got: %+v", reloaded)
+	if tok, chat := notifier.Default.Credentials(); tok != "123456789:SecretBotTokenValueXYZ" || chat != "-100999999" {
+		t.Errorf("expected existing bot token to be preserved and chat_id updated, got: %s %s", tok, chat)
 	}
-
-	// 4b. Guardar en /save_telegram con phone vacío recurre a la cuenta activa (Issue #10)
-	saveEmptyPhoneReq := httptest.NewRequest("POST", "/save_telegram", strings.NewReader(`{"phone":"","bot_token":"","chat_id":"-100888888"}`))
-	saveEmptyPhoneReq.Header.Set("Content-Type", "application/json")
-	saveEmptyPhoneRec := httptest.NewRecorder()
-	handler.ServeHTTP(saveEmptyPhoneRec, saveEmptyPhoneReq)
-	if saveEmptyPhoneRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on /save_telegram with empty phone fallback, got %d: %s", saveEmptyPhoneRec.Code, saveEmptyPhoneRec.Body.String())
-	}
-	reloadedFallback := config.LoadAccountConfig("612345678")
-	if reloadedFallback.TelegramChatID != "-100888888" {
-		t.Errorf("expected chat_id updated via fallback, got: %s", reloadedFallback.TelegramChatID)
+	stRec := httptest.NewRecorder()
+	handler.ServeHTTP(stRec, httptest.NewRequest("GET", "/telegram_status", nil))
+	if strings.Contains(stRec.Body.String(), "SecretBotTokenValueXYZ") {
+		t.Errorf("/telegram_status leaked plaintext bot token: %s", stRec.Body.String())
 	}
 
 	// 5. Intentar guardar bot_token con comillas o salto de línea -> 400 Bad Request
-	badSaveReq := httptest.NewRequest("POST", "/save_telegram", strings.NewReader(`{"phone":"612345678","bot_token":"123:abc\"def","chat_id":"-100999999"}`))
+	badSaveReq := httptest.NewRequest("POST", "/save_telegram", strings.NewReader(`{"bot_token":"123:abc\"def","chat_id":"-100999999"}`))
 	badSaveReq.Header.Set("Content-Type", "application/json")
 	badSaveRec := httptest.NewRecorder()
 	handler.ServeHTTP(badSaveRec, badSaveReq)
@@ -193,102 +162,13 @@ func TestWebUI_MethodsCSRFAndSecretsMasking(t *testing.T) {
 	}
 
 	// 6. Límite de body (> 1 MB) -> 400 Bad Request
-	hugeJSON := `{"phone":"` + strings.Repeat("6", (1<<20)+100) + `"}`
-	hugeReq := httptest.NewRequest("POST", "/verify_phone", bytes.NewReader([]byte(hugeJSON)))
+	hugeJSON := `{"chat_id":"` + strings.Repeat("6", (1<<20)+100) + `"}`
+	hugeReq := httptest.NewRequest("POST", "/save_telegram", bytes.NewReader([]byte(hugeJSON)))
 	hugeReq.Header.Set("Content-Type", "application/json")
 	hugeRec := httptest.NewRecorder()
 	handler.ServeHTTP(hugeRec, hugeReq)
 	if hugeRec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 on >1MB JSON body, got %d", hugeRec.Code)
-	}
-}
-
-func TestWebUI_UnlinkActiveAndSecondary(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := config.TokensDir
-	config.TokensDir = tmpDir
-	t.Cleanup(func() { config.TokensDir = origTokensDir })
-
-	// Create active account (612345678) and secondary account (699999999)
-	activeCfg := config.AccountConfig{
-		Provider: "movistar",
-		Phone:    "612345678",
-	}
-	if err := config.SaveAccountConfig(activeCfg); err != nil {
-		t.Fatalf("SaveAccountConfig active failed: %v", err)
-	}
-	secCfg := config.AccountConfig{
-		Provider: "o2",
-		Phone:    "699999999",
-	}
-	if err := config.SaveAccountConfig(secCfg); err != nil {
-		t.Fatalf("SaveAccountConfig secondary failed: %v", err)
-	}
-
-	// Create dummy metadata DB files for both
-	_ = os.WriteFile(filepath.Join(tmpDir, "metadata_612345678.db"), []byte("active-db"), 0600)
-	_ = os.WriteFile(filepath.Join(tmpDir, "metadata_699999999.db"), []byte("sec-db"), 0600)
-
-	client, err := sapi.NewClient(activeCfg)
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	authCfg := config.AuthConfig{AuthDisabled: true}
-	davSrv := webdav.NewServerWithAuth(client, authCfg)
-	uiSrv := NewServerWithAuth(client, davSrv, authCfg)
-	handler := uiSrv.Routes()
-
-	// 1. Unlink secondary account (699999999)
-	unlinkSecBody := strings.NewReader(`{"phone":"699999999"}`)
-	unlinkSecReq := httptest.NewRequest("POST", "/unlink", unlinkSecBody)
-	unlinkSecReq.Header.Set("Content-Type", "application/json")
-	unlinkSecRec := httptest.NewRecorder()
-	handler.ServeHTTP(unlinkSecRec, unlinkSecReq)
-	if unlinkSecRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on /unlink secondary, got %d: %s", unlinkSecRec.Code, unlinkSecRec.Body.String())
-	}
-
-	// Verify secondary config & DB files are removed
-	if _, err := os.Stat(filepath.Join(tmpDir, "account_699999999.env")); !os.IsNotExist(err) {
-		t.Errorf("expected secondary account config to be deleted")
-	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "metadata_699999999.db")); !os.IsNotExist(err) {
-		t.Errorf("expected secondary metadata DB to be deleted")
-	}
-
-	// Verify primary account is still intact and uiSrv client is still active
-	if _, err := os.Stat(filepath.Join(tmpDir, "account_612345678.env")); err != nil {
-		t.Errorf("expected primary account config to remain, got err: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "metadata_612345678.db")); err != nil {
-		t.Errorf("expected primary metadata DB to remain, got err: %v", err)
-	}
-	if uiSrv.client == nil || uiSrv.client.GetConfig().Phone != "612345678" {
-		t.Errorf("expected active client to remain active on secondary unlink, got: %v", uiSrv.client)
-	}
-
-	// 2. Unlink active account (612345678)
-	unlinkActBody := strings.NewReader(`{"phone":"612345678"}`)
-	unlinkActReq := httptest.NewRequest("POST", "/unlink", unlinkActBody)
-	unlinkActReq.Header.Set("Content-Type", "application/json")
-	unlinkActRec := httptest.NewRecorder()
-	handler.ServeHTTP(unlinkActRec, unlinkActReq)
-	if unlinkActRec.Code != http.StatusOK {
-		t.Fatalf("expected 200 on /unlink active, got %d: %s", unlinkActRec.Code, unlinkActRec.Body.String())
-	}
-
-	// Verify active client config is cleared and proxy is stopped
-	if uiSrv.client != nil && uiSrv.client.GetConfig().Phone != "" {
-		t.Errorf("expected active client config to be cleared after active unlink, got: %v", uiSrv.client.GetConfig())
-	}
-	if uiSrv.IsRunning() {
-		t.Errorf("expected server to not be running after unlinking active account")
-	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "account_612345678.env")); !os.IsNotExist(err) {
-		t.Errorf("expected active account config to be deleted")
-	}
-	if _, err := os.Stat(filepath.Join(tmpDir, "metadata_612345678.db")); !os.IsNotExist(err) {
-		t.Errorf("expected active metadata DB to be deleted")
 	}
 }
 
@@ -734,289 +614,6 @@ func TestWebUI_Logout_DirectNavigationAndResidualBasicAuth(t *testing.T) {
 
 	if blockedPanelRec.Code != http.StatusSeeOther || blockedPanelRec.Header().Get("Location") != "/login" {
 		t.Errorf("expected 303 -> /login for browser navigation without session cookie, got %d -> %s", blockedPanelRec.Code, blockedPanelRec.Header().Get("Location"))
-	}
-}
-
-func TestWebUI_CompleteLogin_O2_CapturesSAPISession(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := config.TokensDir
-	config.TokensDir = tmpDir
-	t.Cleanup(func() { config.TokensDir = origTokensDir })
-
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"access_token":  "o2-access-token-123",
-			"refresh_token": "o2-refresh-token-456",
-			"expires_in":    3600,
-			"token_type":    "Bearer",
-		})
-	}))
-	defer tokenServer.Close()
-	t.Setenv("OAUTH_TOKEN_URL", tokenServer.URL)
-
-	syncDone := make(chan struct{})
-	var syncOnce sync.Once
-	sapiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if strings.Contains(r.URL.Path, "/login/oauth") {
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data": map[string]interface{}{
-					"validationkey": "o2-sapi-valkey",
-					"jsessionid":    "o2-sapi-jsess",
-				},
-				"responsetime": 1794834400000,
-			})
-			return
-		}
-		if strings.Contains(r.URL.Path, "/profile/changes") {
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{}})
-			syncOnce.Do(func() { close(syncDone) })
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{"status": "ok"}})
-	}))
-	defer sapiServer.Close()
-	t.Setenv("SAPI_BASE_URL", sapiServer.URL+"/sapi")
-
-	client, err := sapi.NewClient(config.AccountConfig{})
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	authCfg := config.AuthConfig{AuthDisabled: true}
-	davSrv := webdav.NewServerWithAuth(client, authCfg)
-	t.Cleanup(func() {
-		select {
-		case <-syncDone:
-			time.Sleep(50 * time.Millisecond)
-		case <-time.After(1 * time.Second):
-		}
-		if ms := davSrv.MetadataStore(); ms != nil {
-			_ = ms.Close()
-		}
-	})
-	uiSrv := NewServerWithAuth(client, davSrv, authCfg)
-	handler := uiSrv.Routes()
-
-	// 1. /start_login for O2
-	startBody := strings.NewReader(`{"phone":"612345678","provider":"o2"}`)
-	startReq := httptest.NewRequest("POST", "/start_login", startBody)
-	startReq.Header.Set("Content-Type", "application/json")
-	startRec := httptest.NewRecorder()
-	handler.ServeHTTP(startRec, startReq)
-
-	if startRec.Code != http.StatusOK {
-		t.Fatalf("/start_login failed with code %d: %s", startRec.Code, startRec.Body.String())
-	}
-
-	// 2. /complete_login with code for O2
-	completeBody := strings.NewReader(`{"phone":"612345678","provider":"o2","code_or_url":"test-code"}`)
-	completeReq := httptest.NewRequest("POST", "/complete_login", completeBody)
-	completeReq.Header.Set("Content-Type", "application/json")
-	completeRec := httptest.NewRecorder()
-	handler.ServeHTTP(completeRec, completeReq)
-
-	if completeRec.Code != http.StatusOK {
-		t.Fatalf("/complete_login failed with code %d: %s", completeRec.Code, completeRec.Body.String())
-	}
-
-	savedCfg := config.LoadAccountConfig("612345678")
-	if savedCfg.Provider != "o2" {
-		t.Errorf("Provider = %q, want o2", savedCfg.Provider)
-	}
-	if savedCfg.AccessToken != "o2-access-token-123" {
-		t.Errorf("AccessToken = %q, want o2-access-token-123", savedCfg.AccessToken)
-	}
-	if savedCfg.RefreshToken != "o2-refresh-token-456" {
-		t.Errorf("RefreshToken = %q, want o2-refresh-token-456", savedCfg.RefreshToken)
-	}
-	if savedCfg.ValidationKey != "o2-sapi-valkey" {
-		t.Errorf("ValidationKey = %q, want o2-sapi-valkey", savedCfg.ValidationKey)
-	}
-	if savedCfg.JSessionID != "o2-sapi-jsess" {
-		t.Errorf("JSessionID = %q, want o2-sapi-jsess", savedCfg.JSessionID)
-	}
-
-	clientCfg := client.GetConfig()
-	if clientCfg.AccessToken != "o2-access-token-123" {
-		t.Errorf("clientCfg.AccessToken = %q, want 'o2-access-token-123'", clientCfg.AccessToken)
-	}
-	if clientCfg.ValidationKey != "o2-sapi-valkey" {
-		t.Errorf("clientCfg.ValidationKey = %q, want 'o2-sapi-valkey'", clientCfg.ValidationKey)
-	}
-	if clientCfg.JSessionID != "o2-sapi-jsess" {
-		t.Errorf("clientCfg.JSessionID = %q, want 'o2-sapi-jsess'", clientCfg.JSessionID)
-	}
-}
-
-func TestWebUI_CompleteLogin_Movistar_CapturesSAPISession(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := config.TokensDir
-	config.TokensDir = tmpDir
-	t.Cleanup(func() { config.TokensDir = origTokensDir })
-
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"access_token":  "mov-access-token-123",
-			"refresh_token": "mov-refresh-token-456",
-			"expires_in":    3600,
-			"token_type":    "Bearer",
-		})
-	}))
-	defer tokenServer.Close()
-	t.Setenv("OAUTH_TOKEN_URL", tokenServer.URL)
-
-	syncDone := make(chan struct{})
-	var syncOnce sync.Once
-	sapiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/login/oauth") {
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"data": map[string]interface{}{
-					"validationkey": "mov-sapi-valkey",
-					"jsessionid":    "mov-sapi-jsess",
-				},
-				"responsetime": 1794834400000,
-			})
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": map[string]interface{}{"status": "ok"}})
-		if strings.Contains(r.URL.Path, "/profile/changes") {
-			syncOnce.Do(func() { close(syncDone) })
-		}
-	}))
-	defer sapiServer.Close()
-	t.Setenv("SAPI_BASE_URL", sapiServer.URL+"/sapi")
-
-	client, err := sapi.NewClient(config.AccountConfig{})
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	authCfg := config.AuthConfig{AuthDisabled: true}
-	davSrv := webdav.NewServerWithAuth(client, authCfg)
-	t.Cleanup(func() {
-		select {
-		case <-syncDone:
-			time.Sleep(50 * time.Millisecond)
-		case <-time.After(1 * time.Second):
-		}
-		if ms := davSrv.MetadataStore(); ms != nil {
-			_ = ms.Close()
-		}
-	})
-	uiSrv := NewServerWithAuth(client, davSrv, authCfg)
-	handler := uiSrv.Routes()
-
-	// 1. /start_login for Movistar
-	startBody := strings.NewReader(`{"phone":"622334455","provider":"movistar"}`)
-	startReq := httptest.NewRequest("POST", "/start_login", startBody)
-	startReq.Header.Set("Content-Type", "application/json")
-	startRec := httptest.NewRecorder()
-	handler.ServeHTTP(startRec, startReq)
-
-	if startRec.Code != http.StatusOK {
-		t.Fatalf("/start_login failed with code %d: %s", startRec.Code, startRec.Body.String())
-	}
-
-	// 2. /complete_login with code for Movistar
-	completeBody := strings.NewReader(`{"phone":"622334455","provider":"movistar","code_or_url":"test-code"}`)
-	completeReq := httptest.NewRequest("POST", "/complete_login", completeBody)
-	completeReq.Header.Set("Content-Type", "application/json")
-	completeRec := httptest.NewRecorder()
-	handler.ServeHTTP(completeRec, completeReq)
-
-	if completeRec.Code != http.StatusOK {
-		t.Fatalf("/complete_login failed with code %d: %s", completeRec.Code, completeRec.Body.String())
-	}
-
-	savedCfg := config.LoadAccountConfig("622334455")
-	if savedCfg.Provider != "movistar" {
-		t.Errorf("Provider = %q, want movistar", savedCfg.Provider)
-	}
-	if savedCfg.ValidationKey != "mov-sapi-valkey" {
-		t.Errorf("savedCfg.ValidationKey = %q, want 'mov-sapi-valkey'", savedCfg.ValidationKey)
-	}
-	if savedCfg.JSessionID != "mov-sapi-jsess" {
-		t.Errorf("savedCfg.JSessionID = %q, want 'mov-sapi-jsess'", savedCfg.JSessionID)
-	}
-}
-
-func TestWebUI_CompleteLogin_RejectsWhenSAPIReturns401(t *testing.T) {
-	tmpDir := t.TempDir()
-	origTokensDir := config.TokensDir
-	config.TokensDir = tmpDir
-	t.Cleanup(func() { config.TokensDir = origTokensDir })
-
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"access_token":  "o2-access-token-123",
-			"refresh_token": "o2-refresh-token-456",
-			"expires_in":    3600,
-			"token_type":    "Bearer",
-		})
-	}))
-	defer tokenServer.Close()
-	t.Setenv("OAUTH_TOKEN_URL", tokenServer.URL)
-
-	syncCalled := false
-	sapiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/login/oauth") {
-			w.Header().Set("Server", "CloudFront")
-			w.Header().Set("X-Cache", "Error from cloudfront")
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if strings.Contains(r.URL.Path, "/profile/changes") {
-			syncCalled = true
-		}
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer sapiServer.Close()
-	t.Setenv("SAPI_BASE_URL", sapiServer.URL+"/sapi")
-
-	client, err := sapi.NewClient(config.AccountConfig{})
-	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
-	}
-	authCfg := config.AuthConfig{AuthDisabled: true}
-	davSrv := webdav.NewServerWithAuth(client, authCfg)
-	davSrv.SetRunning(false)
-	uiSrv := NewServerWithAuth(client, davSrv, authCfg)
-	handler := uiSrv.Routes()
-
-	startReq := httptest.NewRequest("POST", "/start_login", strings.NewReader(`{"phone":"612345678","provider":"o2"}`))
-	startReq.Header.Set("Content-Type", "application/json")
-	startRec := httptest.NewRecorder()
-	handler.ServeHTTP(startRec, startReq)
-	if startRec.Code != http.StatusOK {
-		t.Fatalf("/start_login failed with code %d: %s", startRec.Code, startRec.Body.String())
-	}
-
-	completeReq := httptest.NewRequest("POST", "/complete_login", strings.NewReader(`{"phone":"612345678","provider":"o2","code_or_url":"test-code"}`))
-	completeReq.Header.Set("Content-Type", "application/json")
-	completeRec := httptest.NewRecorder()
-	handler.ServeHTTP(completeRec, completeReq)
-
-	if completeRec.Code != http.StatusBadGateway {
-		t.Fatalf("/complete_login code = %d, want %d (body: %s)", completeRec.Code, http.StatusBadGateway, completeRec.Body.String())
-	}
-	if !strings.Contains(completeRec.Body.String(), `"status":"error"`) {
-		t.Errorf("expected error payload, got: %s", completeRec.Body.String())
-	}
-	if savedCfg := config.LoadAccountConfig("612345678"); savedCfg.AccessToken != "" || savedCfg.RefreshToken != "" {
-		t.Errorf("broken account config was persisted despite SAPI 401: %+v", savedCfg)
-	}
-	if client.HasCredentials() {
-		t.Errorf("client.HasCredentials() = true, want false after SAPI 401")
-	}
-	if davSrv.IsRunning() {
-		t.Errorf("davSrv.IsRunning() = true, want false after SAPI 401")
-	}
-	if syncCalled {
-		t.Errorf("initial sync was triggered despite SAPI 401")
 	}
 }
 

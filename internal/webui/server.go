@@ -3,7 +3,6 @@ package webui
 import (
 	"bytes"
 	"crypto/rand"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
@@ -16,13 +15,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"movistar-webdav-proxy/internal/auth"
-	"movistar-webdav-proxy/internal/cache"
 	"movistar-webdav-proxy/internal/config"
 	"movistar-webdav-proxy/internal/logger"
 	"movistar-webdav-proxy/internal/notifier"
@@ -41,8 +37,6 @@ var loginTmpl = template.Must(template.New("login").Parse(string(loginHTML)))
 
 const (
 	maxBodyBytes       = 1 << 20 // 1 MB
-	loginStateTTL      = 30 * time.Minute
-	maxPendingLogin    = 50
 	sessionCookieName  = "mc_webui_session"
 	defaultSessionTTL  = 24 * time.Hour
 	rememberSessionTTL = 30 * 24 * time.Hour
@@ -67,8 +61,6 @@ type Server struct {
 	webdavServer  *webdav.Server
 	notifier      *notifier.TelegramNotifier
 	updateChecker *updater.Checker
-	loginMu       sync.Mutex
-	loginState    map[string]*pendingLogin
 	authCfg       config.AuthConfig
 	rateLimiter   *config.AuthRateLimiter
 	sessionMu     sync.RWMutex
@@ -97,13 +89,6 @@ func (s *Server) SetWebRelogin(h http.Handler) {
 	s.webRelogin = h
 }
 
-type pendingLogin struct {
-	Provider string
-	Verifier string
-	State    string
-	Time     time.Time
-}
-
 func NewServer(client *sapi.Client, webdavServer *webdav.Server) *Server {
 	return NewServerWithAuth(client, webdavServer, config.LoadWebUIAuthConfig())
 }
@@ -115,7 +100,6 @@ func NewServerWithAuth(client *sapi.Client, webdavServer *webdav.Server, authCfg
 		webdavServer:  webdavServer,
 		notifier:      tg,
 		updateChecker: updater.NewChecker(),
-		loginState:    make(map[string]*pendingLogin),
 		authCfg:       authCfg,
 		rateLimiter:   config.NewAuthRateLimiter(10, time.Minute),
 		sessions:      make(map[string]*webSession),
@@ -156,14 +140,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	mux.HandleFunc("/version", s.handleVersion)
 	mux.HandleFunc("/status", s.handleStatus)
-	mux.HandleFunc("/verify_phone", s.handleVerifyPhone)
 	mux.HandleFunc("/storage_info", s.handleStorageInfo)
 	mux.HandleFunc("/start", s.handleStart)
 	mux.HandleFunc("/stop", s.handleStop)
 	mux.HandleFunc("/logs", s.handleLogs)
-	mux.HandleFunc("/start_login", s.handleStartLogin)
-	mux.HandleFunc("/complete_login", s.handleCompleteLogin)
-	mux.HandleFunc("/unlink", s.handleUnlink)
 	mux.HandleFunc("/test_telegram", s.handleTestTelegram)
 	mux.HandleFunc("/save_telegram", s.handleSaveTelegram)
 	mux.HandleFunc("/telegram_status", s.handleTelegramStatus)
@@ -783,40 +763,6 @@ func webDAVHostPort() string {
 	return "5050"
 }
 
-func (s *Server) handleVerifyPhone(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Phone string `json:"phone"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	phone := config.SanitizePhone(body.Phone)
-	if phone == "" {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "Teléfono inválido"})
-		return
-	}
-
-	cfg := config.LoadAccountConfig(phone)
-	hasCredentials := cfg.RefreshToken != "" || (cfg.JSessionID != "" && cfg.ValidationKey != "")
-	hasDeviceToken := cfg.RefreshToken != ""
-
-	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
-		s.notifier.UpdateCredentials(cfg.TelegramBotToken, cfg.TelegramChatID)
-	}
-
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status":                "ok",
-		"phone":                 phone,
-		"provider":              cfg.Provider,
-		"has_credentials":       hasCredentials,
-		"has_device_token":      hasDeviceToken,
-		"device_id":             logger.Mask(cfg.DeviceID),
-		"telegram_configured":   cfg.TelegramBotToken != "" && cfg.TelegramChatID != "",
-		"telegram_token_masked": logger.Mask(cfg.TelegramBotToken),
-		"telegram_chat_id":      cfg.TelegramChatID,
-	})
-}
-
 func (s *Server) handleStorageInfo(w http.ResponseWriter, r *http.Request) {
 	if !s.client.HasCredentials() {
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
@@ -919,281 +865,6 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) cleanupExpiredLoginsLocked(now time.Time) {
-	for k, v := range s.loginState {
-		if now.Sub(v.Time) > loginStateTTL {
-			delete(s.loginState, k)
-		}
-	}
-	if len(s.loginState) >= maxPendingLogin {
-		var oldestKey string
-		var oldestTime time.Time
-		for k, v := range s.loginState {
-			if oldestKey == "" || v.Time.Before(oldestTime) {
-				oldestKey = k
-				oldestTime = v.Time
-			}
-		}
-		if oldestKey != "" {
-			delete(s.loginState, oldestKey)
-		}
-	}
-}
-
-func (s *Server) handleStartLogin(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Phone    string `json:"phone"`
-		Provider string `json:"provider"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	phone := config.SanitizePhone(body.Phone)
-	if phone == "" {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "Introduce un teléfono válido"})
-		return
-	}
-
-	provider := strings.ToLower(strings.TrimSpace(body.Provider))
-	if provider != "o2" {
-		provider = "movistar"
-	}
-
-	verifier, state, authURL := auth.BuildOAuthLoginURL(provider)
-
-	now := time.Now()
-	s.loginMu.Lock()
-	s.cleanupExpiredLoginsLocked(now)
-	s.loginState[phone] = &pendingLogin{
-		Provider: provider,
-		Verifier: verifier,
-		State:    state,
-		Time:     now,
-	}
-	s.loginMu.Unlock()
-
-	logger.Log("[OAuth] 🔑 URL de autorización generada para %s (Proveedor: %s)", logger.Mask(phone), provider)
-	jsonResponse(w, http.StatusOK, map[string]interface{}{
-		"status":   "ok",
-		"auth_url": authURL,
-		"provider": provider,
-	})
-}
-
-func (s *Server) handleCompleteLogin(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Phone     string `json:"phone"`
-		CodeOrURL string `json:"code_or_url"`
-		Provider  string `json:"provider"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	phone := config.SanitizePhone(body.Phone)
-	rawCode := body.CodeOrURL
-
-	if phone == "" || rawCode == "" {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "Datos incompletos"})
-		return
-	}
-
-	now := time.Now()
-	s.loginMu.Lock()
-	s.cleanupExpiredLoginsLocked(now)
-	pending, ok := s.loginState[phone]
-	s.loginMu.Unlock()
-
-	if !ok || pending == nil || now.Sub(pending.Time) > loginStateTTL {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "La sesión de vinculación ha expirado o no se ha iniciado. Abre de nuevo el enlace de login."})
-		return
-	}
-
-	// Si el usuario pegó la URL completa o incluye state=, validar state en tiempo constante
-	if returnedState, hasStateInInput := auth.ExtractState(rawCode); hasStateInInput && returnedState != "" {
-		if subtle.ConstantTimeCompare([]byte(returnedState), []byte(pending.State)) != 1 {
-			jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "El parámetro state de seguridad no coincide. Inicia de nuevo la vinculación."})
-			return
-		}
-	}
-
-	verifier := pending.Verifier
-	provider := strings.ToLower(strings.TrimSpace(body.Provider))
-	if provider == "" {
-		provider = pending.Provider
-	}
-	if provider != "o2" {
-		provider = "movistar"
-	}
-
-	code := auth.ExtractAuthCode(rawCode)
-	if code == "" {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "No se encontró un código de autorización válido"})
-		return
-	}
-
-	var inputValidationKey string
-	if parsedInputURL, err := url.Parse(rawCode); err == nil {
-		q := parsedInputURL.Query()
-		if vk := q.Get("validationkey"); vk != "" {
-			inputValidationKey = vk
-		} else if vk := q.Get("validationKey"); vk != "" {
-			inputValidationKey = vk
-		}
-	}
-
-	callbackURL := strings.TrimSpace(rawCode)
-	if !strings.HasPrefix(strings.ToLower(callbackURL), "http") {
-		callback, parseErr := url.Parse(auth.GetOAuthRedirectURI(provider))
-		if parseErr != nil {
-			jsonResponse(w, http.StatusInternalServerError, map[string]interface{}{"status": "error", "message": "No se pudo preparar la URL de retorno OAuth"})
-			return
-		}
-		query := callback.Query()
-		query.Set("code", code)
-		query.Set("state", pending.State)
-		callback.RawQuery = query.Encode()
-		callbackURL = callback.String()
-	}
-
-	primedClient, primedCookies, sessionErr := auth.NewSAPILoginSessionAt(provider, callbackURL)
-	if sessionErr != nil {
-		logger.Log("[OAuth] ⚠️ No se pudo preparar la sesión web previa a SAPI: %v", sessionErr)
-	} else {
-		logger.Log("[OAuth] 🍪 Sesión web preparada para SAPI (cookies: %v).", primedCookies.Names)
-	}
-
-	logger.Log("[OAuth] 🔄 Canjeando código para %s en apiseg.telefonica.es (%s)...", logger.Mask(phone), provider)
-	tokens, err := auth.ExchangeCodeForTokens(code, verifier, provider)
-	if err != nil {
-		logger.Log("[OAuth] ❌ Error en canje para %s: %v", logger.Mask(phone), err)
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{"status": "error", "message": "No se pudo canjear el código de autorización. Comprueba que no haya caducado."})
-		return
-	}
-
-	existingCfg := config.LoadAccountConfig(phone)
-	devID := auth.SanitizeDeviceID(existingCfg.DeviceID)
-	if devID == "" {
-		devID = auth.GenerateDeviceID()
-	}
-	logger.Log("[OAuth] ✔ Tokens obtenidos para el dispositivo %s (%s)...", logger.Mask(devID), provider)
-
-	sapiBase := auth.GetSAPIBaseURL(provider)
-	nowMS := time.Now().UnixMilli()
-
-	cfg := config.AccountConfig{
-		Provider:         provider,
-		Phone:            phone,
-		DeviceID:         devID,
-		DeviceName:       "PC Windows",
-		RefreshToken:     tokens.RefreshToken,
-		AccessToken:      tokens.AccessToken,
-		LastRefreshDate:  nowMS,
-		ExpiresIn:        strconv.Itoa(tokens.ExpiresIn),
-		TelegramBotToken: existingCfg.TelegramBotToken,
-		TelegramChatID:   existingCfg.TelegramChatID,
-	}
-
-	var sapiRes auth.SAPILoginResult
-	for attempt := 0; attempt < 3; attempt++ {
-		sapiRes = auth.SAPILoginOAuth(primedClient, sapiBase, tokens.AccessToken, tokens.RefreshToken, devID, "PC Windows", nowMS, strconv.Itoa(tokens.ExpiresIn))
-		if sapiRes.StatusCode == http.StatusOK && sapiRes.Error == nil && (sapiRes.ValidationKey != "" || sapiRes.JSessionID != "") {
-			break
-		}
-		if attempt < 2 {
-			time.Sleep(time.Duration(attempt+1) * time.Second)
-		}
-	}
-
-	if sapiRes.ValidationKey != "" {
-		cfg.ValidationKey = sapiRes.ValidationKey
-	} else if primedCookies.ValidationKey != "" {
-		cfg.ValidationKey = primedCookies.ValidationKey
-	} else if inputValidationKey != "" {
-		cfg.ValidationKey = inputValidationKey
-	}
-	if sapiRes.JSessionID != "" {
-		cfg.JSessionID = sapiRes.JSessionID
-	} else if primedCookies.JSessionID != "" {
-		cfg.JSessionID = primedCookies.JSessionID
-	}
-	if sapiRes.LastRefreshDate > 0 {
-		cfg.LastRefreshDate = sapiRes.LastRefreshDate
-	}
-	if sapiRes.RefreshedOAuth != nil {
-		if sapiRes.RefreshedOAuth.AccessToken != "" {
-			cfg.AccessToken = sapiRes.RefreshedOAuth.AccessToken
-		}
-		if sapiRes.RefreshedOAuth.RefreshToken != "" {
-			cfg.RefreshToken = sapiRes.RefreshedOAuth.RefreshToken
-		}
-	}
-	if sapiRes.StatusCode != http.StatusOK || sapiRes.Error != nil || (cfg.ValidationKey == "" && cfg.JSessionID == "") {
-		logger.Log("[OAuth] ❌ Error inicializando sesión SAPI tras canje en %s (%s): HTTP %d (Server=%q, X-Cache=%q, vk=%v, js=%v, err=%v, body=%q)",
-			logger.Mask(phone), provider, sapiRes.StatusCode, sapiRes.Server, sapiRes.XCache, cfg.ValidationKey != "", cfg.JSessionID != "", sapiRes.Error, sapiRes.BodyPreview)
-
-		s.loginMu.Lock()
-		delete(s.loginState, phone)
-		s.loginMu.Unlock()
-
-		if s.client == nil || !s.client.HasCredentials() {
-			s.SetRunning(false)
-		}
-
-		msg := fmt.Sprintf("SAPI rechazó el inicio de sesión en %s (HTTP %d). Comprueba los logs y vuelve a iniciar la vinculación.", provider, sapiRes.StatusCode)
-		if sapiRes.StatusCode == 0 && sapiRes.Error != nil {
-			msg = fmt.Sprintf("No se pudo conectar con SAPI en %s: %v", provider, sapiRes.Error)
-		} else if sapiRes.StatusCode == http.StatusOK && cfg.ValidationKey == "" && cfg.JSessionID == "" {
-			msg = fmt.Sprintf("SAPI respondió HTTP 200 en %s sin credenciales de sesión (validationkey/JSESSIONID).", provider)
-		}
-		jsonResponse(w, http.StatusBadGateway, map[string]interface{}{"status": "error", "message": msg})
-		return
-	}
-	logger.Log("[OAuth] ✔ Sesión SAPI inicializada con éxito (%s).", provider)
-
-	if err := config.SaveAccountConfig(cfg); err != nil {
-		logger.Log("[OAuth] ⚠️ Error guardando credenciales: %v", err)
-	}
-
-	s.loginMu.Lock()
-	delete(s.loginState, phone)
-	s.loginMu.Unlock()
-
-	s.client.SetConfig(cfg)
-	if s.webdavServer != nil {
-		s.webdavServer.InvalidateCache()
-		dbPath := filepath.Join(config.TokensDir, fmt.Sprintf("metadata_%s.db", phone))
-		newStore, err := cache.NewMetadataStore(dbPath)
-		if err != nil {
-			logger.Log("[Metadata] ⚠️ Error inicializando MetadataStore tras login: %v", err)
-		} else {
-			logger.Log("[Metadata] 🗄️ SQLite MetadataStore inicializado para %s en %s", logger.Mask(phone), maskDBPath(dbPath))
-			if oldStore := s.webdavServer.MetadataStore(); oldStore != nil && oldStore != newStore {
-				_ = oldStore.Close()
-			}
-			s.webdavServer.SetMetadataStore(newStore)
-			go func() {
-				logger.Log("[Metadata] 🔄 Sincronizando metadatos para nueva cuenta vinculada...")
-				if _, syncErr := newStore.SyncChanges(s.client, true); syncErr != nil {
-					logger.Log("[Metadata] ⚠️ Error en sincronización inicial: %v", syncErr)
-				} else {
-					logger.Log("[Metadata] ✔ Sincronización inicial completada para %s", logger.Mask(phone))
-					if fs := s.webdavServer.FS(); fs != nil {
-						fs.RecordSyncTime(time.Now())
-						fs.BootstrapEmptyFiles()
-					}
-				}
-			}()
-		}
-	}
-	if cfg.TelegramBotToken != "" && cfg.TelegramChatID != "" {
-		s.notifier.UpdateCredentials(cfg.TelegramBotToken, cfg.TelegramChatID)
-	}
-	s.SetRunning(true)
-
-	logger.Log("[OAuth] ✔ ¡Dispositivo vinculado y guardado con éxito para %s (%s)! Proxy WebDAV activo.", logger.Mask(phone), provider)
-	jsonResponse(w, http.StatusOK, map[string]interface{}{"status": "ok", "provider": provider})
-}
-
 func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Phone    string `json:"phone"`
@@ -1207,16 +878,10 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 	botToken := strings.TrimSpace(body.BotToken)
 	chatID := strings.TrimSpace(body.ChatID)
 
-	phone := config.SanitizePhone(body.Phone)
-	cfg := config.LoadAccountConfig(phone)
-	if botToken == "" || strings.Contains(botToken, "…") || strings.Contains(botToken, "****") {
-		botToken = cfg.TelegramBotToken
+	// Sin token (o con el enmascarado) o sin chat: los activos en el notificador.
+	if strings.Contains(botToken, "…") || strings.Contains(botToken, "****") {
+		botToken = ""
 	}
-	if chatID == "" {
-		chatID = cfg.TelegramChatID
-	}
-
-	// Si no había archivo en disco (ej. tras desvincular), usar los activos en el notificador / Docker
 	if botToken == "" || chatID == "" {
 		envToken, envChat := s.notifier.Credentials()
 		if botToken == "" {
@@ -1242,7 +907,7 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := notifier.SendTestWith(botToken, chatID, cfg.Provider); err != nil {
+	if err := notifier.SendTestWith(botToken, chatID, "movistar"); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
 			"status":  "error",
 			"message": err.Error(),
@@ -1316,130 +981,7 @@ func (s *Server) handleSaveTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	phone := config.SanitizePhone(body.Phone)
-	if phone == "" && config.WebSessionEnabled() {
-		s.saveTelegramWeb(w, strings.TrimSpace(body.BotToken), strings.TrimSpace(body.ChatID))
-		return
-	}
-	if phone == "" {
-		if activeCfg := s.client.GetConfig(); activeCfg.Phone != "" {
-			phone = activeCfg.Phone
-		} else {
-			loaded := config.LoadAccountConfig("")
-			phone = loaded.Phone
-		}
-	}
-	if phone == "" {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-			"status":  "error",
-			"message": "Introduce un teléfono válido o vincula una cuenta primero",
-		})
-		return
-	}
-
-	cfg := config.LoadAccountConfig(phone)
-	newToken := strings.TrimSpace(body.BotToken)
-	newChatID := strings.TrimSpace(body.ChatID)
-
-	// Si el usuario deja el token vacío o envía el valor enmascarado mientras mantiene un chat_id, conservar el token actual
-	if (newToken == "" || strings.Contains(newToken, "…") || strings.Contains(newToken, "****")) && newChatID != "" && cfg.TelegramBotToken != "" {
-		newToken = cfg.TelegramBotToken
-	}
-
-	if !config.ValidateBotToken(newToken) {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-			"status":  "error",
-			"message": "Formato de Token de Telegram inválido (esperado: 123456:ABC-DEF...)",
-		})
-		return
-	}
-	if !config.ValidateChatID(newChatID) {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-			"status":  "error",
-			"message": "Formato de Chat ID inválido (esperado: ID numérico o @canal)",
-		})
-		return
-	}
-
-	cfg.TelegramBotToken = newToken
-	cfg.TelegramChatID = newChatID
-
-	if err := config.SaveAccountConfig(cfg); err != nil {
-		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-			"status":  "error",
-			"message": "Error guardando configuración de Telegram",
-		})
-		return
-	}
-
-	s.client.SetConfig(cfg)
-	if s.webdavServer != nil {
-		s.webdavServer.InvalidateCache()
-	}
-	s.notifier.UpdateCredentials(cfg.TelegramBotToken, cfg.TelegramChatID)
-
-	logger.Log("[Telegram] ⚙️ Credenciales de Telegram actualizadas para %s.", logger.Mask(phone))
-	jsonResponse(w, http.StatusOK, map[string]interface{}{"status": "ok"})
-}
-
-func (s *Server) handleUnlink(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Phone string `json:"phone"`
-	}
-	if !decodeJSONBody(w, r, &body) {
-		return
-	}
-	phone := config.SanitizePhone(body.Phone)
-	activePhone := config.SanitizePhone(s.client.GetConfig().Phone)
-	if phone == "" {
-		phone = activePhone
-	}
-
-	isActive := (phone == "" || phone == activePhone)
-
-	if isActive {
-		if s.webdavServer != nil {
-			s.webdavServer.InvalidateCache()
-			if ms := s.webdavServer.MetadataStore(); ms != nil {
-				dbPath := ms.Path()
-				_ = ms.Close()
-				s.webdavServer.SetMetadataStore(nil)
-				if dbPath != "" {
-					if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
-						logger.Log("[WebUI] ⚠️ Error eliminando base de datos SQLite %s: %v", maskDBPath(dbPath), err)
-					}
-					_ = os.Remove(dbPath + "-wal")
-					_ = os.Remove(dbPath + "-shm")
-				}
-			}
-		}
-		if phone != "" {
-			dbPath := filepath.Join(config.TokensDir, fmt.Sprintf("metadata_%s.db", phone))
-			if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
-				logger.Log("[WebUI] ⚠️ Error eliminando base de datos SQLite %s: %v", maskDBPath(dbPath), err)
-			}
-			_ = os.Remove(dbPath + "-wal")
-			_ = os.Remove(dbPath + "-shm")
-		}
-
-		_ = config.DeleteAccountConfig(phone)
-		s.client.SetConfig(config.AccountConfig{})
-		s.SetRunning(false)
-
-		logger.Log("[OAuth] 🗑️ Dispositivo desvinculado y credenciales eliminadas por el usuario.")
-	} else {
-		// Secondary account unlink: only delete its config and its metadata db
-		dbPath := filepath.Join(config.TokensDir, fmt.Sprintf("metadata_%s.db", phone))
-		if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
-			logger.Log("[WebUI] ⚠️ Error eliminando base de datos SQLite secundaria %s: %v", maskDBPath(dbPath), err)
-		}
-		_ = os.Remove(dbPath + "-wal")
-		_ = os.Remove(dbPath + "-shm")
-		_ = config.DeleteAccountConfig(phone)
-		logger.Log("[OAuth] 🗑️ Cuenta secundaria %s desvinculada y credenciales eliminadas.", logger.Mask(phone))
-	}
-
-	jsonResponse(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+	s.saveTelegramWeb(w, strings.TrimSpace(body.BotToken), strings.TrimSpace(body.ChatID))
 }
 
 func maskDBPath(p string) string {
