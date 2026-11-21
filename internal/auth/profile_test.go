@@ -2,10 +2,8 @@ package auth
 
 import (
 	"crypto/md5"
-	"encoding/base64"
 	"fmt"
 	"net"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -14,77 +12,11 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
-func TestClientProfile_DefaultsAndOverrides(t *testing.T) {
-	cases := []struct {
-		profile, webSession, want string
-	}{
-		{"", "", ProfileDesktop},
-		{"", "true", ProfileBrowser},
-		{"browser", "", ProfileBrowser},
-		{"desktop", "true", ProfileDesktop},
-	}
-	for _, c := range cases {
-		t.Setenv("SAPI_CLIENT_PROFILE", c.profile)
-		t.Setenv("WEB_SESSION", c.webSession)
-		if got := ClientProfile(); got != c.want {
-			t.Errorf("SAPI_CLIENT_PROFILE=%q WEB_SESSION=%q: %q, want %q", c.profile, c.webSession, got, c.want)
-		}
-	}
-}
-
-func TestDesktopProfile_UserAgentAndDeviceID(t *testing.T) {
-	t.Setenv("SAPI_CLIENT_PROFILE", "desktop")
-	t.Setenv("SAPI_USER_AGENT", "")
-	t.Setenv("DESKTOP_USER_AGENT", "")
-
-	if got := GetSAPIUserAgent(); got != "omh windows client 4.0.1" {
-		t.Errorf("GetSAPIUserAgent() = %q, want the official desktop client UA", got)
-	}
-
-	id := GenerateDeviceID()
-	if !strings.HasPrefix(id, "fol-") {
-		t.Fatalf("GenerateDeviceID() = %q, want fol- prefix", id)
-	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(id, "fol-"))
-	if err != nil || len(raw) != 16 {
-		t.Errorf("GenerateDeviceID() = %q, want fol- + base64 of 16 bytes (err=%v, len=%d)", id, err, len(raw))
-	}
-
-	if got := SanitizeDeviceID("fol-xShd2lUKwcsWLi7YPhSfnA=="); got != "fol-xShd2lUKwcsWLi7YPhSfnA==" {
-		t.Errorf("SanitizeDeviceID(fol-…) = %q, want unchanged", got)
-	}
-	a, b := SanitizeDeviceID("web-0123abcd"), SanitizeDeviceID("web-0123abcd")
-	if !strings.HasPrefix(a, "fol-") || a != b {
-		t.Errorf("SanitizeDeviceID(web-…) = %q / %q, want a stable fol- identifier", a, b)
-	}
-
-	header := BuildOAuthHeader("at", "rt", 1794879489187, "3600")
-	decoded, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(header, "oauth "))
-	if !strings.Contains(string(decoded), `"platform":"windows"`) {
-		t.Errorf("Authorization payload = %s, want platform windows", decoded)
-	}
-}
-
 func TestNewRequestID_IsUUIDv4(t *testing.T) {
 	re := regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	if id := NewRequestID(); !re.MatchString(id) {
 		t.Errorf("NewRequestID() = %q, want a UUID v4", id)
 	}
-}
-
-func TestFingerprintedTransport_SAPIProtocolByProfile(t *testing.T) {
-	type h1Reporter interface{ UsesHTTP1ForSAPI() bool }
-	for profile, want := range map[string]bool{"desktop": true, "browser": false} {
-		t.Setenv("SAPI_CLIENT_PROFILE", profile)
-		rt, ok := NewFingerprintedTransport().(h1Reporter)
-		if !ok {
-			t.Fatalf("transport does not report its SAPI protocol")
-		}
-		if got := rt.UsesHTTP1ForSAPI(); got != want {
-			t.Errorf("profile %s: UsesHTTP1ForSAPI() = %v, want %v", profile, got, want)
-		}
-	}
-	var _ http.RoundTripper = NewFingerprintedTransport()
 }
 
 func TestHTTP1OnlySpec_AdvertisesOnlyHTTP11(t *testing.T) {
@@ -105,26 +37,6 @@ func TestHTTP1OnlySpec_AdvertisesOnlyHTTP11(t *testing.T) {
 		if !found {
 			t.Errorf("%s: no ALPN extension in spec", id.Str())
 		}
-	}
-}
-
-func TestClientHelloIDFromEnv_DefaultsByProfile(t *testing.T) {
-	t.Setenv("UTLS_CLIENT_HELLO", "")
-
-	t.Setenv("SAPI_CLIENT_PROFILE", "desktop")
-	if got := clientHelloIDFromEnv(); got != HelloO2Windows {
-		t.Errorf("desktop default ClientHello = %v, want HelloO2Windows", got)
-	}
-
-	t.Setenv("SAPI_CLIENT_PROFILE", "browser")
-	if got := clientHelloIDFromEnv(); got != utls.HelloChrome_Auto {
-		t.Errorf("browser default ClientHello = %v, want HelloChrome_Auto", got)
-	}
-
-	t.Setenv("SAPI_CLIENT_PROFILE", "desktop")
-	t.Setenv("UTLS_CLIENT_HELLO", "chrome_auto")
-	if got := clientHelloIDFromEnv(); got != utls.HelloChrome_Auto {
-		t.Errorf("explicit UTLS_CLIENT_HELLO=chrome_auto = %v, want HelloChrome_Auto", got)
 	}
 }
 
@@ -169,12 +81,11 @@ func ja3(t *testing.T, h []byte) (string, int) {
 	return strings.Join(parts, ","), alpn
 }
 
-// El ClientHello del perfil desktop debe ser el del cliente oficial capturado sin MITM.
+// UTLS_CLIENT_HELLO=o2 da el ClientHello del cliente oficial capturado sin MITM.
 func TestO2WindowsHello_MatchesOfficialClientCapture(t *testing.T) {
-	t.Setenv("SAPI_CLIENT_PROFILE", "desktop")
-	t.Setenv("UTLS_CLIENT_HELLO", "")
+	t.Setenv("UTLS_CLIENT_HELLO", "o2")
 	if id := clientHelloIDFromEnv(); id != HelloO2Windows {
-		t.Fatalf("huella por defecto en desktop = %s, want O2Windows", id.Str())
+		t.Fatalf("huella con UTLS_CLIENT_HELLO=o2 = %s, want O2Windows", id.Str())
 	}
 	spec, err := http1OnlySpec(HelloO2Windows)
 	if err != nil {
@@ -201,8 +112,8 @@ func TestO2WindowsHello_MatchesOfficialClientCapture(t *testing.T) {
 	if len(raw) != 512 {
 		t.Fatalf("longitud del ClientHello = %d, want 512 (relleno de OpenSSL)", len(raw))
 	}
-	t.Setenv("SAPI_CLIENT_PROFILE", "browser")
+	t.Setenv("UTLS_CLIENT_HELLO", "")
 	if id := clientHelloIDFromEnv(); id != utls.HelloChrome_Auto {
-		t.Fatalf("perfil browser: huella = %s, want Chrome", id.Str())
+		t.Fatalf("por defecto: huella = %s, want Chrome", id.Str())
 	}
 }

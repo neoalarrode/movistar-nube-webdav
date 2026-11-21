@@ -121,12 +121,6 @@ func TestSAPIUserAgentDefault(t *testing.T) {
 func TestGetOAuthUserAgent_DefaultMatchesSAPIUserAgent(t *testing.T) {
 	t.Setenv("DESKTOP_USER_AGENT", "")
 	t.Setenv("SAPI_USER_AGENT", "")
-	t.Setenv("SAPI_CLIENT_PROFILE", "desktop")
-	if got, want := getOAuthUserAgent(), GetDesktopUserAgent(); got != want {
-		t.Fatalf("getOAuthUserAgent() in desktop profile = %q, want %q", got, want)
-	}
-
-	t.Setenv("SAPI_CLIENT_PROFILE", "browser")
 	if got, want := getOAuthUserAgent(), SAPIUserAgent; got != want {
 		t.Fatalf("getOAuthUserAgent() in browser profile = %q, want %q", got, want)
 	}

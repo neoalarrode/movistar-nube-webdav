@@ -1,15 +1,12 @@
 package webdav
 
 import (
-	"math"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"movistar-webdav-proxy/internal/config"
 )
 
 // uploadGate reparte los huecos de subida a la nube (WEBDAV_MAX_UPLOADS) entre todas
@@ -231,16 +228,10 @@ func (g *uploadGate) capacityNow() int {
 // queueDiskBudget es el disco total que pueden ocupar las subidas en cola
 // (WEBDAV_QUEUE_DISK_MB). Con la RAM y el disco de la cola llenos, el proxy deja de
 // leer del cliente (le llega velocidad 0) hasta que haya hueco de subida.
-// Sin la variable: en el perfil desktop, sin límite (un cuerpo que no puede subir en
-// flujo va entero al spool y nunca se hace esperar al cliente, que puede depender de
-// otra petición para seguir enviando: interbloqueo restic -> rclone); en el modo web,
-// 0 (nada en disco: pensado para equipos pequeños, el cliente espera).
+// Sin la variable, 0: nada en disco (pensado para equipos pequeños, el cliente espera).
 func queueDiskBudget() int64 {
 	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WEBDAV_QUEUE_DISK_MB"))); err == nil && v >= 0 {
 		return int64(v) << 20
-	}
-	if config.IsDesktopProfile() {
-		return math.MaxInt64 / 2
 	}
 	return 0
 }

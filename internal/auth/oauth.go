@@ -39,9 +39,6 @@ func GetSAPIUserAgent() string {
 	if value := strings.TrimSpace(os.Getenv("SAPI_USER_AGENT")); value != "" {
 		return value
 	}
-	if IsDesktopProfile() {
-		return GetDesktopUserAgent()
-	}
 	return SAPIUserAgent
 	// ua, _ := GetSAPIUserAgentInfo()	return ua si se quiere usar función secundaria
 }
@@ -50,9 +47,6 @@ func GetSAPIUserAgent() string {
 // mediante SAPI_USER_AGENT respecto a la constante por defecto SAPIUserAgent.
 func GetSAPIUserAgentInfo() (string, bool) {
 	def := SAPIUserAgent
-	if IsDesktopProfile() {
-		def = GetDesktopUserAgent()
-	}
 	if value := strings.TrimSpace(os.Getenv("SAPI_USER_AGENT")); value != "" && value != def {
 		return value, true
 	}
@@ -75,7 +69,6 @@ func GetDesktopUserAgentInfo() (string, bool) {
 	}
 	return DesktopUserAgent, false
 }
-
 
 var (
 	authCodeQueryRegex = regexp.MustCompile(`code=([A-Za-z0-9\-_.~]+)`)
@@ -300,17 +293,10 @@ func mustRandRead(b []byte) {
 	}
 }
 
-// SanitizeDeviceID adapta el identificador de dispositivo al perfil activo.
-// Perfil "desktop": formato del cliente oficial "fol-<base64>"; un "web-…" heredado
-// se convierte de forma estable. Perfil "browser": "web-…" sin '+', '/', '='.
+// SanitizeDeviceID deja el identificador de dispositivo en el formato de la web:
+// "web-…" sin '+', '/', '='.
 func SanitizeDeviceID(devID string) string {
 	devID = strings.TrimSpace(devID)
-	if IsDesktopProfile() {
-		if devID == "" || strings.HasPrefix(devID, "fol-") {
-			return devID
-		}
-		return desktopDeviceIDFrom(devID)
-	}
 	if strings.HasPrefix(devID, "fol-") {
 		clean := strings.TrimPrefix(devID, "fol-")
 		clean = strings.NewReplacer("+", "", "/", "", "=", "").Replace(clean)
@@ -320,9 +306,6 @@ func SanitizeDeviceID(devID string) string {
 }
 
 func GenerateDeviceID() string {
-	if IsDesktopProfile() {
-		return generateDesktopDeviceID()
-	}
 	b := make([]byte, 16)
 	mustRandRead(b)
 	return fmt.Sprintf("web-%x", b)
@@ -680,25 +663,16 @@ func sapiLoginOAuthRequest(client *http.Client, sapiBaseURL, authorization, user
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "*/*")
-	if IsDesktopProfile() {
-		// Como el cliente oficial: sin Referer, X-Requested-With ni X-devicename.
-		req.Header.Set("Accept-Language", DesktopAcceptLanguage)
-		req.Header.Set("x-request-id", NewRequestID())
-		if deviceID != "" {
-			req.Header.Set("X-deviceid", SanitizeDeviceID(deviceID))
-		}
-	} else {
-		if parsedEndpoint, parseErr := url.Parse(endpoint); parseErr == nil && parsedEndpoint.Host != "" {
-			req.Header.Set("Referer", parsedEndpoint.Scheme+"://"+parsedEndpoint.Host+"/")
-		}
-		req.Header.Set("X-Requested-With", "XMLHttpRequest")
-		req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
-		if deviceID != "" {
-			req.Header.Set("X-deviceid", SanitizeDeviceID(deviceID))
-		}
-		if deviceName != "" {
-			req.Header.Set("X-devicename", deviceName)
-		}
+	if parsedEndpoint, parseErr := url.Parse(endpoint); parseErr == nil && parsedEndpoint.Host != "" {
+		req.Header.Set("Referer", parsedEndpoint.Scheme+"://"+parsedEndpoint.Host+"/")
+	}
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
+	if deviceID != "" {
+		req.Header.Set("X-deviceid", SanitizeDeviceID(deviceID))
+	}
+	if deviceName != "" {
+		req.Header.Set("X-devicename", deviceName)
 	}
 
 	resp, err := client.Do(req)

@@ -176,14 +176,10 @@ func GetUploadRAMBufferMaxBytes() int {
 // WEBDAV_UPLOAD_SPOOL=false no se guarda: cada subida ocupa solo el búfer del flujo
 // y, si falla, el PUT responde 503 y el cliente la repite.
 // uploadSpoolEnabled: copia local de cada subida mientras se manda a la nube
-// (WEBDAV_UPLOAD_SPOOL). Sin la variable: en el perfil desktop sí (un envío cortado
-// continúa desde el disco sobre el mismo ID, como la app); en el modo web no (subida
-// directa, nada en disco, con el cliente limitado a la velocidad de subida).
+// (WEBDAV_UPLOAD_SPOOL=true). Por defecto no: subida directa, nada en disco, con el
+// cliente limitado a la velocidad de subida.
 func uploadSpoolEnabled() bool {
-	if v := strings.TrimSpace(os.Getenv("WEBDAV_UPLOAD_SPOOL")); v != "" {
-		return strings.EqualFold(v, "true")
-	}
-	return config.IsDesktopProfile()
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("WEBDAV_UPLOAD_SPOOL")), "true")
 }
 
 func getUploadTempDir() string {
@@ -671,11 +667,9 @@ func (mfs *MovistarFS) SetMetadataStore(ms *cache.MetadataStore) {
 	}
 }
 
-// realEmptyFiles: los archivos de 0 bytes se suben de verdad a la nube
-// (config.RealEmptyFiles), salvo en el modo web, que no usa la subida de la app.
-func (mfs *MovistarFS) realEmptyFiles() bool {
-	return config.RealEmptyFiles() && mfs != nil && mfs.client != nil && !mfs.client.WebMode()
-}
+// realEmptyFiles: subir de verdad los archivos de 0 bytes era cosa de la subida de la
+// app oficial; el modo web los emula. Se retira junto con ese código (issue #1).
+func (mfs *MovistarFS) realEmptyFiles() bool { return false }
 
 // BootstrapEmptyFiles carga desde la nube el manifiesto de archivos vacíos emulados hacia SQLite.
 func (mfs *MovistarFS) BootstrapEmptyFiles() {
@@ -2740,16 +2734,6 @@ func (w *WebDAVFileWriter) sapiExistingID() string {
 	}
 	return w.existingID
 }
-
-// streamUploads indica si se sube en flujo directo (por defecto sí; con
-// WEBDAV_STREAM_UPLOAD=false, no): el contenido se reenvía a O2 mientras llega, como
-// la app oficial, y el cliente recibe la respuesta poco después del último byte. Sin
-// flujo, el cuerpo se recibe entero (RAM o spool) y el cliente espera en silencio a
-// que el proxy lo suba: en archivos grandes, más que el tiempo de espera de rclone
-// (5 min). El envío en flujo no retiene el hueco de la API (ver sapi.DoRequest), y
-// nunca se espera turno ni hueco de RAM antes de leer un cuerpo (cola de subidas,
-// Write), así que varias subidas a la vez no se bloquean entre sí.
-func (mfs *MovistarFS) streamUploads() bool { return config.StreamUploads() }
 
 // canStream indica si la subida puede ir en flujo directo: tamaño anunciado,
 // carpeta real y no es un archivo de control.

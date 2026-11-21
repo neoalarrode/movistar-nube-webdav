@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"movistar-webdav-proxy/internal/config"
 	"movistar-webdav-proxy/internal/logger"
 )
 
@@ -32,9 +31,7 @@ import (
 // officialClient indica si se habla como el cliente oficial de Windows: perfil
 // desktop y con sesión OAuth propia, con Movistar y con O2 (ver
 // config.OfficialClient). El perfil browser y el modo web hablan como la web.
-func (c *Client) officialClient() bool {
-	return config.OfficialClient() && !c.WebMode()
-}
+func (c *Client) officialClient() bool { return false }
 
 // officialContentTypes: los content-type que la app manda (capturados) y que el
 // sistema puede resolver de otra forma (audio/mp4, image/heif…). El .heif va como
