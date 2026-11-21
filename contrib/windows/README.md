@@ -2,7 +2,11 @@
 
 `instalar-nube.ps1` deja en un PC con Windows 10/11:
 
-- **La unidad «Nube» (N:)**, montada con rclone contra el WebDAV de movistar-nube-webdav. Se monta sola al iniciar sesión y usa una caché de escritura local.
+- **La unidad «Nube» (N:)**, montada con rclone contra el WebDAV de movistar-nube-webdav, con una caché de escritura local.
+  - Un vigilante oculto la monta al iniciar sesión.
+  - **La vuelve a montar sola** si rclone se cierra o deja de responder, por ejemplo tras perder la conexión.
+  - Si el servidor no responde, espera a que vuelva antes de montar.
+  - Cada remontaje queda anotado en `%LOCALAPPDATA%\rclone-nube\vigilante.log`.
 - **«Enviar a → Nube (subida directa)»** en el menú del botón derecho, para subir archivos y carpetas enteras sin pasar por la caché:
   - leyendo el original a la velocidad de la subida;
   - con una cola, de modo que varios envíos esperan su turno;
@@ -32,7 +36,7 @@ Instala rclone y WinFsp con `winget`. Se puede volver a ejecutar para actualizar
 
 ## Problemas
 
-- **La unidad no aparece:** reinicia la sesión de Windows, o mira `%LOCALAPPDATA%\rclone-nube\mount.log`.
+- **La unidad no aparece:** reinicia la sesión de Windows, o mira `vigilante.log` y `mount.log` en `%LOCALAPPDATA%\rclone-nube`.
 - **Desinstalar:**
   1. Borra `Nube.cmd` de la carpeta de inicio (`shell:startup`).
   2. Borra el acceso «Nube (subida directa)» de `shell:sendto`.

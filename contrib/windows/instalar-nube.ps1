@@ -31,13 +31,13 @@ Write-Host "2/5 Datos del WebDAV" -ForegroundColor Cyan
 $remotos = & $rclone listremotes
 # Instalaciones anteriores usaban el remoto «nube-pi»: se pasa a «nube» con sus datos.
 if (($remotos -contains "nube-pi:") -and -not ($remotos -contains "${Remoto}:")) {
-    $viejo = (& $rclone config dump | ConvertFrom-Json)."nube-pi"
+    $viejo = ((& $rclone config dump | Out-String) | ConvertFrom-Json)."nube-pi"
     & $rclone config create $Remoto webdav url=$($viejo.url) vendor=owncloud user=$($viejo.user) pass=$($viejo.pass) --no-obscure | Out-Null
     & $rclone config delete "nube-pi" | Out-Null
     $remotos = & $rclone listremotes
 }
 $existe = $remotos -contains "${Remoto}:"
-if (-not $Url -and $existe) { $Url = (& $rclone config dump | ConvertFrom-Json).$Remoto.url }
+if (-not $Url -and $existe) { $Url = ((& $rclone config dump | Out-String) | ConvertFrom-Json).$Remoto.url }
 while (-not $Url) { $Url = (Read-Host "URL del WebDAV (p. ej. http://192.168.1.10:5050/datos)").Trim() }
 Write-Host "   $Url"
 if ($existe -and (Read-Host "Ya está configurado. ¿Cambiar usuario y contraseña? (s/N)") -notmatch '^[sS]') {
@@ -52,13 +52,72 @@ if ($existe -and (Read-Host "Ya está configurado. ¿Cambiar usuario y contrase�
 & $rclone lsd "${Remoto}:" | Select-Object -First 3
 if ($LASTEXITCODE -ne 0) { throw "No se pudo entrar en el WebDAV: revisa la URL, el usuario, la contraseña y que el servidor esté encendido" }
 
-Write-Host "3/5 Lanzador de la unidad $Letra al iniciar sesión" -ForegroundColor Cyan
+Write-Host "3/5 Vigilante de la unidad $Letra (se monta al iniciar sesión y se remonta sola)" -ForegroundColor Cyan
 # El control remoto de rclone (solo local y con clave) sirve para que la unidad vea al
-# momento lo subido por «Enviar a», sin esperar a que caduque la lista de carpetas.
+# momento lo subido por «Enviar a» y para que el vigilante sepa si rclone responde.
 $rcPass = -join ((48..57) + (97..122) | Get-Random -Count 24 | ForEach-Object { [char]$_ })
-$rc = "--rc --rc-addr 127.0.0.1:5572 --rc-user nube --rc-pass $rcPass"
-$cmd = "@echo off`r`n`"$rclone`" mount ${Remoto}: $Letra --vfs-cache-mode writes --cache-dir `"$cache`" --vfs-cache-max-age 1h --vfs-write-back 5s --dir-cache-time 10m $rc --volname Nube --no-console --log-file `"$cache\mount.log`" --log-level NOTICE`r`n"
 New-Item -ItemType Directory -Force -Path $cache | Out-Null
+$vigilante = @'
+# Vigilante de la unidad «Nube»: la monta y la vuelve a montar si rclone se cierra o
+# deja de responder (p. ej. tras perder la conexión). Si el servidor no responde,
+# espera a que vuelva antes de montar. Deja constancia en vigilante.log.
+$rclone = "__RCLONE__"; $Remoto = "__REMOTO__"; $Letra = "__LETRA__"; $RcPass = "__RCPASS__"; $cache = "__CACHE__"
+$log = Join-Path $cache "vigilante.log"
+function Anota([string]$m) { Add-Content -LiteralPath $log -Value ("{0:yyyy-MM-dd HH:mm:ss} {1}" -f (Get-Date), $m) -Encoding UTF8 }
+# Una sola instancia por sesión.
+$unico = New-Object System.Threading.Mutex($false, "Local\NubeVigilante")
+if (-not $unico.WaitOne(0)) { exit 0 }
+$rcAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("nube:$RcPass"))
+$opciones = @("mount", "${Remoto}:", $Letra, "--vfs-cache-mode", "writes", "--cache-dir", $cache,
+    "--vfs-cache-max-age", "1h", "--vfs-write-back", "5s", "--dir-cache-time", "10m",
+    "--rc", "--rc-addr", "127.0.0.1:5572", "--rc-user", "nube", "--rc-pass", $RcPass,
+    "--volname", "Nube", "--no-console", "--log-file", (Join-Path $cache "mount.log"), "--log-level", "NOTICE")
+# Start-Process (PowerShell 5.1) no entrecomilla: las rutas con espacios van entre comillas.
+$linea = ($opciones | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -join ' '
+function RcloneResponde {
+    try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5572/rc/noop" -Headers @{ Authorization = $rcAuth } -TimeoutSec 5 | Out-Null; return $true } catch { return $false }
+}
+function ServidorResponde {
+    & $rclone lsd "${Remoto}:" --contimeout 10s --timeout 20s 2>$null | Out-Null
+    return ($LASTEXITCODE -eq 0)
+}
+$proc = $null
+$sinRespuesta = 0
+while ($true) {
+    if (-not $proc -or $proc.HasExited) {
+        if ($proc) { Anota "rclone se ha cerrado (código $($proc.ExitCode)): se vuelve a montar." }
+        $avisado = $false
+        while (-not (ServidorResponde)) {
+            if (-not $avisado) { Anota "El servidor no responde: se monta en cuanto vuelva."; $avisado = $true }
+            Start-Sleep -Seconds 30
+        }
+        # Un rclone de un montaje anterior que siga vivo (colgado) se cierra antes.
+        Get-CimInstance Win32_Process -Filter "Name = 'rclone.exe'" |
+            Where-Object { $_.CommandLine -like "* mount ${Remoto}:*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+        $proc = Start-Process -FilePath $rclone -ArgumentList $linea -WindowStyle Hidden -PassThru
+        Anota "Unidad $Letra montada (rclone PID $($proc.Id))."
+        $sinRespuesta = 0
+        Start-Sleep -Seconds 15
+        continue
+    }
+    if (RcloneResponde) {
+        $sinRespuesta = 0
+    } else {
+        $sinRespuesta++
+        if ($sinRespuesta -ge 3) {
+            Anota "rclone no responde desde hace 90 s: se reinicia el montaje."
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 3
+        }
+    }
+    Start-Sleep -Seconds 30
+}
+'@
+$vigilante = $vigilante.Replace("__RCLONE__", $rclone).Replace("__REMOTO__", $Remoto).Replace("__LETRA__", $Letra).Replace("__RCPASS__", $rcPass).Replace("__CACHE__", $cache)
+$vigilanteScript = "$cache\vigilante.ps1"
+Set-Content -Path $vigilanteScript -Value $vigilante -Encoding UTF8
+$cmd = "@echo off`r`nstart `"`" `"$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe`" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$vigilanteScript`"`r`n"
 $lanzador = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Nube.cmd"
 Set-Content -Path $lanzador -Value $cmd -Encoding ASCII
 
@@ -114,7 +173,7 @@ $rcCopia = @("--rc", "--rc-addr", "127.0.0.1:5574", "--rc-user", "nube", "--rc-p
 $destFile = Join-Path $cola ("{0}.destino" -f $PID) # no .txt: esos son los turnos de la cola
 $informe = $null
 try {
-    $cfg = (& $rclone config dump | ConvertFrom-Json).$Remoto
+    $cfg = ((& $rclone config dump | Out-String) | ConvertFrom-Json).$Remoto
     $estadoUrl = ([Uri]$cfg.url).GetLeftPart([UriPartial]::Authority) + "/.nube-estado"
     $davPass = (& $rclone reveal $cfg.pass)
     $auth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("$($cfg.user):$davPass"))
@@ -141,30 +200,30 @@ $items = $Rutas | ForEach-Object { Get-Item -LiteralPath $_ }
 # Cada conflicto: Rel (ruta relativa a la carpeta enviada o al destino), y tamaño y
 # fecha de los dos lados.
 function Get-Remotos([string]$ruta, [bool]$recursivo) {
-    $args = @("lsjson", $ruta, "--files-only", "--no-mimetype")
-    if ($recursivo) { $args += "-R" }
-    $j = & $rclone @args 2>$null
+    $lsArgs = @("lsjson", $ruta, "--files-only", "--no-mimetype")
+    if ($recursivo) { $lsArgs += "-R" }
+    $j = & $rclone @lsArgs 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $j) { return @{} }
     $m = @{}
-    foreach ($f in ($j | ConvertFrom-Json)) { $m[$f.Path.ToLowerInvariant()] = $f }
+    foreach ($o in (($j | Out-String) | ConvertFrom-Json)) { $m[$o.Path.ToLowerInvariant()] = $o }
     return $m
 }
 $conflictos = New-Object System.Collections.Generic.List[object]
 foreach ($d in $items | Where-Object { $_.PSIsContainer }) {
     $remotos = Get-Remotos "$base/$($d.Name)" $true
     if ($remotos.Count -eq 0) { continue }
-    foreach ($f in Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Force) {
-        if ($f.Name -in @("Thumbs.db", "desktop.ini")) { continue }
-        $rel = $f.FullName.Substring($d.FullName.Length).TrimStart('\').Replace('\', '/')
-        $r = $remotos[$rel.ToLowerInvariant()]
-        if ($r) { $conflictos.Add([pscustomobject]@{ Grupo = $d.FullName; Rel = $rel; Local = $f; Nube = $r }) }
+    foreach ($arch in Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Force) {
+        if ($arch.Name -in @("Thumbs.db", "desktop.ini")) { continue }
+        $relArch = $arch.FullName.Substring($d.FullName.Length).TrimStart('\').Replace('\', '/')
+        $r = $remotos[$relArch.ToLowerInvariant()]
+        if ($r) { $conflictos.Add([pscustomobject]@{ Grupo = $d.FullName; Rel = $relArch; Local = $arch; Nube = $r }) }
     }
 }
 foreach ($g in $items | Where-Object { -not $_.PSIsContainer } | Group-Object DirectoryName) {
     $remotos = Get-Remotos $base $false
-    foreach ($f in $g.Group) {
-        $r = $remotos[$f.Name.ToLowerInvariant()]
-        if ($r) { $conflictos.Add([pscustomobject]@{ Grupo = $g.Name; Rel = $f.Name; Local = $f; Nube = $r }) }
+    foreach ($arch in $g.Group) {
+        $r = $remotos[$arch.Name.ToLowerInvariant()]
+        if ($r) { $conflictos.Add([pscustomobject]@{ Grupo = $g.Name; Rel = $arch.Name; Local = $arch; Nube = $r }) }
     }
 }
 
@@ -172,19 +231,19 @@ $modo = "nuevos"   # sin conflictos: rclone salta lo que ya está igual
 $reemplazar = @{}  # modo «uno»: Grupo -> lista de rutas relativas a reemplazar
 if ($conflictos.Count -gt 0) {
     $tam = { param($b) if ($b -ge 1GB) { "{0:N1} GB" -f ($b / 1GB) } else { "{0:N1} MB" -f ($b / 1MB) } }
-    $f = New-Object System.Windows.Forms.Form -Property @{ Text = "Nube: archivos que ya existen"; Width = 460; Height = 190; StartPosition = "CenterScreen"; TopMost = $true; FormBorderStyle = "FixedDialog"; MaximizeBox = $false; MinimizeBox = $false }
+    $form = New-Object System.Windows.Forms.Form -Property @{ Text = "Nube: archivos que ya existen"; Width = 460; Height = 190; StartPosition = "CenterScreen"; TopMost = $true; FormBorderStyle = "FixedDialog"; MaximizeBox = $false; MinimizeBox = $false }
     $l = New-Object System.Windows.Forms.Label -Property @{ Left = 15; Top = 15; Width = 420; Height = 50; Text = "$($conflictos.Count) archivo(s) ya existen en la nube con el mismo nombre. ¿Qué hago con ellos?" }
-    $f.Controls.Add($l)
+    $form.Controls.Add($l)
     $opciones = @(@("Omitir todos", "omitir"), @("Reemplazar todos", "reemplazar"), @("Decidir uno a uno", "uno"))
     $x = 15
     foreach ($o in $opciones) {
         $b = New-Object System.Windows.Forms.Button -Property @{ Left = $x; Top = 80; Width = 130; Height = 32; Text = $o[0]; Tag = $o[1] }
-        $b.Add_Click({ $f.Tag = $this.Tag; $f.Close() })
-        $f.Controls.Add($b); $x += 140
+        $b.Add_Click({ $form.Tag = $this.Tag; $form.Close() })
+        $form.Controls.Add($b); $x += 140
     }
-    [void]$f.ShowDialog()
-    if (-not $f.Tag) { Write-Host "Cancelado: no se ha subido nada."; exit 0 }
-    $modo = $f.Tag
+    [void]$form.ShowDialog()
+    if (-not $form.Tag) { Write-Host "Cancelado: no se ha subido nada."; exit 0 }
+    $modo = $form.Tag
     if ($modo -eq "uno") {
         $u = New-Object System.Windows.Forms.Form -Property @{ Text = "Nube: marca los que quieres reemplazar"; Width = 900; Height = 520; StartPosition = "CenterScreen"; TopMost = $true }
         $lista = New-Object System.Windows.Forms.CheckedListBox -Property @{ Left = 10; Top = 10; Width = 865; Height = 410; CheckOnClick = $true; HorizontalScrollbar = $true; Anchor = "Top,Bottom,Left,Right" }
@@ -273,6 +332,10 @@ $acceso.Save()
 Write-Host "5/5 Montando $Letra" -ForegroundColor Cyan
 # Si ya estaba montada, se desmonta para arrancarla con la configuración nueva. Lo que
 # quedara pendiente en la caché se sube al volver a montar.
+# Primero el vigilante (si no, volvería a montarla), luego el rclone del montaje.
+Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" |
+    Where-Object { $_.CommandLine -like "*vigilante.ps1*" } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
 Get-CimInstance Win32_Process -Filter "Name = 'rclone.exe'" |
     Where-Object { $_.CommandLine -like "* mount ${Remoto}:*" } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force; Start-Sleep -Seconds 2 }
@@ -284,13 +347,13 @@ Start-Process -FilePath "$env:SystemRoot\explorer.exe" -ArgumentList "`"$lanzado
 # montaje por su control remoto.
 $rcAuth = "Basic " + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("nube:$rcPass"))
 $montada = $false
-for ($i = 0; $i -lt 15 -and -not $montada; $i++) {
+for ($i = 0; $i -lt 30 -and -not $montada; $i++) {
     Start-Sleep -Seconds 2
     try { Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:5572/mount/listmounts" -Headers @{ Authorization = $rcAuth } -TimeoutSec 3 | Out-Null; $montada = $true } catch { }
 }
 if ($montada) {
-    Write-Host "Listo: la unidad $Letra (Nube) está montada y se montará sola al iniciar sesión. Para subir sin caché: clic derecho > Enviar a > Nube (subida directa)." -ForegroundColor Green
+    Write-Host "Listo: la unidad $Letra (Nube) está montada, se montará sola al iniciar sesión y se vuelve a montar si pierde la conexión. Para subir sin caché: clic derecho > Enviar a > Nube (subida directa)." -ForegroundColor Green
 } else {
-    Write-Host "No he podido comprobar el montaje. Mira $cache\mount.log o reinicia la sesión de Windows." -ForegroundColor Yellow
+    Write-Host "No he podido comprobar el montaje. Mira $cache\vigilante.log y $cache\mount.log, o reinicia la sesión de Windows." -ForegroundColor Yellow
 }
-else { Write-Host "La unidad no aparece aún; mira $cache\mount.log" -ForegroundColor Yellow }
+
