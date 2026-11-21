@@ -38,8 +38,8 @@ type Options struct {
 	ConfigDir   string // dónde escribir rclone.conf (tmpfs; por defecto /tmp/rclone-proxy)
 
 	// Montaje FUSE de los archivos descifrados (opcional), para que el sistema los
-	// vea como una carpeta normal (Emby, Samba...). Requiere /dev/fuse y SYS_ADMIN.
-	MountPath  string   // WEBDAV_MOUNT_PATH, p. ej. /mnt/emby_cloud
+	// vea como una carpeta normal (servidor multimedia, Samba...). Requiere /dev/fuse y SYS_ADMIN.
+	MountPath  string   // WEBDAV_MOUNT_PATH, p. ej. /mnt/nube
 	MountArgs  []string // WEBDAV_MOUNT_ARGS (sustituye a las opciones por defecto)
 	MountCache string   // WEBDAV_MOUNT_CACHE_DIR (por defecto /app/cache/rclone)
 

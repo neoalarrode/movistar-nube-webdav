@@ -19,7 +19,7 @@ import (
 )
 
 // Prueba de punta a punta con rclone de verdad (RCLONE_BINARY): la nube es un
-// WebDAV sobre una carpeta local; «emby» va cifrada con su clave, «meloinvento»
+// WebDAV sobre una carpeta local; «datos» va cifrada con su clave, «meloinvento»
 // con otra y «Fotos» tal cual. Lo que se sube por el WebDAV descifrado debe quedar
 // en la nube cifrado con los mismos nombres que calcula cryptname, y leerse igual.
 func TestEndToEnd_RealRclone(t *testing.T) {
@@ -28,7 +28,7 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 		t.Skip("RCLONE_BINARY no definido")
 	}
 	cloud := t.TempDir()
-	for _, d := range []string{"emby", "meloinvento", "Fotos", "troceada"} {
+	for _, d := range []string{"datos", "meloinvento", "Fotos", "troceada"} {
 		_ = os.Mkdir(filepath.Join(cloud, d), 0o755)
 	}
 	_ = os.WriteFile(filepath.Join(cloud, "Fotos", "playa.jpg"), []byte("foto"), 0o644)
@@ -43,7 +43,7 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 	addr := l2.Addr().String()
 	l2.Close()
 	folders := []vault.Folder{
-		{Name: "emby", Config: vault.StandardConfig(vault.Crypt{Password: "clave-emby", Password2: "sal-emby"})},
+		{Name: "datos", Config: vault.StandardConfig(vault.Crypt{Password: "clave-datos", Password2: "sal-datos"})},
 		{Name: "meloinvento", Config: vault.StandardConfig(vault.Crypt{Password: "otra-clave"})},
 		{Name: "troceada", Config: vault.StandardConfig(vault.Crypt{Password: "clave-trozos", ChunkSize: "1Mi"})},
 	}
@@ -68,10 +68,10 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 		return resp.StatusCode, string(b)
 	}
 	content := bytes.Repeat([]byte("película "), 1000)
-	if code, _ := do("MKCOL", "/emby/Películas", nil); code >= 300 {
+	if code, _ := do("MKCOL", "/datos/Películas", nil); code >= 300 {
 		t.Fatalf("MKCOL %d", code)
 	}
-	if code, b := do("PUT", "/emby/Películas/Mr. Robot.mkv", content); code >= 300 {
+	if code, b := do("PUT", "/datos/Películas/Mr. Robot.mkv", content); code >= 300 {
 		t.Fatalf("PUT %d %s", code, b)
 	}
 	if code, _ := do("PUT", "/meloinvento/nota.txt", []byte("hola")); code >= 300 {
@@ -79,14 +79,14 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 	}
 
 	// En la nube: nombres cifrados exactamente como los calcula cryptname.
-	ce, _ := cryptname.New("clave-emby", "sal-emby")
+	ce, _ := cryptname.New("clave-datos", "sal-datos")
 	encDir := ce.EncryptSegment("Películas")
 	encFile := ce.EncryptSegment("Mr. Robot.mkv")
-	if _, err := os.Stat(filepath.Join(cloud, "emby", encDir, encFile)); err != nil {
-		entries, _ := filepath.Glob(filepath.Join(cloud, "emby", "*", "*"))
+	if _, err := os.Stat(filepath.Join(cloud, "datos", encDir, encFile)); err != nil {
+		entries, _ := filepath.Glob(filepath.Join(cloud, "datos", "*", "*"))
 		t.Fatalf("no está %s/%s en la nube; hay %v", encDir, encFile, entries)
 	}
-	raw, _ := os.ReadFile(filepath.Join(cloud, "emby", encDir, encFile))
+	raw, _ := os.ReadFile(filepath.Join(cloud, "datos", encDir, encFile))
 	if bytes.Contains(raw, []byte("película")) {
 		t.Fatal("el contenido debe ir cifrado en la nube")
 	}
@@ -95,7 +95,7 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 		t.Fatal("meloinvento debe ir cifrada con su propia clave")
 	}
 
-	// Archivo mayor que el trozo (2 MiB en «meloinvento»... aquí 1Mi en emby2): se trocea.
+	// Archivo mayor que el trozo (2 MiB en «meloinvento»... aquí 1Mi en datos2): se trocea.
 	big := bytes.Repeat([]byte("0123456789abcdef"), 200000) // 3,2 MB
 	if code, b := do("PUT", "/troceada/grande.bin", big); code >= 300 {
 		t.Fatalf("PUT grande %d %s", code, b)
@@ -111,14 +111,14 @@ func TestEndToEnd_RealRclone(t *testing.T) {
 	}
 
 	// Por el WebDAV descifrado: se lee igual y la raíz muestra las tres carpetas.
-	if code, b := do("GET", "/emby/Películas/Mr. Robot.mkv", nil); code != 200 || b != string(content) {
+	if code, b := do("GET", "/datos/Películas/Mr. Robot.mkv", nil); code != 200 || b != string(content) {
 		t.Fatalf("GET %d, %d bytes", code, len(b))
 	}
 	if code, b := do("GET", "/Fotos/playa.jpg", nil); code != 200 || b != "foto" {
 		t.Fatalf("carpeta tal cual: %d %q", code, b)
 	}
 	_, list := do("PROPFIND", "/", nil)
-	for _, d := range []string{"emby", "meloinvento", "Fotos"} {
+	for _, d := range []string{"datos", "meloinvento", "Fotos"} {
 		if !strings.Contains(list, "/"+d+"/") {
 			t.Errorf("la raíz no muestra %s:\n%s", d, list)
 		}

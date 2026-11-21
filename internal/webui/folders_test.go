@@ -16,22 +16,22 @@ func TestBuildFolders(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("progress.log", "2026-11-13 08:00:00 INICIO Peliculas\n2026-11-13 10:54:41 FIN Peliculas rc=1\n2026-11-13 10:54:41 INICIO RTVE Play\n")
+	write("progress.log", "2026-11-13 08:00:00 INICIO Peliculas\n2026-11-13 10:54:41 FIN Peliculas rc=1\n2026-11-13 10:54:41 INICIO Viajes\n")
 	// Incluye una línea sin ruta y un duplicado: no deben contar.
 	write("origen-danado.txt", "Peliculas\tCigüeñas.mkv\t1\tx\nPeliculas\t\t0\ty\nPeliculas\tCigüeñas.mkv\t1\tz\n")
-	write("plan.txt", "Peliculas\nRTVE Play\nNetflix\nMovistar+\nDisney+\n")
-	// folders.json es el ls del montaje de la nube: Disney+ (pendiente) aún no está.
-	write("folders.json", `{"folders":[{"name":"Peliculas","in_cloud":true},{"name":"RTVE Play","in_cloud":true},{"name":"Netflix","in_cloud":true},{"name":"Movistar+","in_cloud":true},{"name":"DVR","in_cloud":true}]}`)
+	write("plan.txt", "Peliculas\nViajes\nVídeos\nTrabajo\nFotos\n")
+	// folders.json es el ls del montaje de la nube: Fotos (pendiente) aún no está.
+	write("folders.json", `{"folders":[{"name":"Peliculas","in_cloud":true},{"name":"Viajes","in_cloud":true},{"name":"Vídeos","in_cloud":true},{"name":"Trabajo","in_cloud":true},{"name":"DVR","in_cloud":true}]}`)
 	write("stats.json", `{"transferring":[{"name":"Serie/T1/e1.mkv","size":10,"bytes":1,"percentage":10}]}`)
-	write("mount-stats.json", `{"transferring":[{"name":"Netflix/Dark/e3.mkv","size":10,"bytes":3,"percentage":30},{"name":"Movistar+/nuevo.mkv","size":10,"bytes":2,"percentage":20}]}`)
-	write("vfs-queue.json", `{"queue":[{"name":"Movistar+/nuevo.mkv","uploading":true},{"name":"DVR/grab.ts","uploading":false}]}`)
+	write("mount-stats.json", `{"transferring":[{"name":"Vídeos/Dark/e3.mkv","size":10,"bytes":3,"percentage":30},{"name":"Trabajo/nuevo.mkv","size":10,"bytes":2,"percentage":20}]}`)
+	write("vfs-queue.json", `{"queue":[{"name":"Trabajo/nuevo.mkv","uploading":true},{"name":"DVR/grab.ts","uploading":false}]}`)
 
 	// Las subidas salen del propio proxy (la de la copia y la del montaje).
 	old := webdav.Transfers
 	webdav.Transfers = webdav.NewTransferTracker(time.Minute)
 	t.Cleanup(func() { webdav.Transfers = old })
-	h1 := webdav.Transfers.Start("upload", "/emby/RTVE Play/Serie/T1/e1.mkv", 10, 0)
-	h2 := webdav.Transfers.Start("upload", "/emby/Movistar+/nuevo.mkv", 10, 0)
+	h1 := webdav.Transfers.Start("upload", "/datos/Viajes/Serie/T1/e1.mkv", 10, 0)
+	h2 := webdav.Transfers.Start("upload", "/datos/Trabajo/nuevo.mkv", 10, 0)
 	defer h1.Done()
 	defer h2.Done()
 
@@ -50,23 +50,23 @@ func TestBuildFolders(t *testing.T) {
 			t.Errorf("%s: actividad %q y copia %q; esperado %q y %q", name, f.Activity, f.Copy, activity, copy)
 		}
 	}
-	check("RTVE Play", "upload", "running")
-	check("Netflix", "download", "pending")
-	check("Movistar+", "upload", "pending")
+	check("Viajes", "upload", "running")
+	check("Vídeos", "download", "pending")
+	check("Trabajo", "upload", "pending")
 	check("DVR", "cache", "excluded")
 	check("Peliculas", "idle", "done_warn")
 	if f := got["Peliculas"]; f.Damaged != 1 || len(f.DamagedFiles) != 1 {
 		t.Errorf("Peliculas: esperado 1 dañado, hay %d (%q)", f.Damaged, f.DamagedFiles)
 	}
-	check("Disney+", "idle", "pending")
-	if f := got["Disney+"]; f.InCloud {
-		t.Error("Disney+ aún no está en la nube")
+	check("Fotos", "idle", "pending")
+	if f := got["Fotos"]; f.InCloud {
+		t.Error("Fotos aún no está en la nube")
 	}
-	if _, ok := got["Emby Server Databases"]; ok {
+	if _, ok := got["el reproductor Server Databases"]; ok {
 		t.Error("una carpeta que solo está en el NAS no debe salir")
 	}
 
-	if len(st.Reading) != 1 || st.Reading[0].Name != "Netflix/Dark/e3.mkv" {
+	if len(st.Reading) != 1 || st.Reading[0].Name != "Vídeos/Dark/e3.mkv" {
 		t.Errorf("la subida del montaje no debe salir como lectura: %+v", st.Reading)
 	}
 	if len(st.Uploading) != 2 {

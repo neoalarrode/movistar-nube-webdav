@@ -58,7 +58,7 @@ func watchHealth(ctx context.Context, sess *webclient.Session, svc *rclonesvc.Se
 	if svc != nil {
 		checks = append(checks, &healthCheck{
 			key: "decrypt_down", title: "Descifrado parado",
-			desc:    "El rclone interno que descifra las carpetas no está funcionando: Emby y las subidas a carpetas cifradas fallan.",
+			desc:    "El rclone interno que descifra las carpetas no está funcionando: las lecturas y subidas de las carpetas cifradas fallan.",
 			okTitle: "Descifrado funcionando de nuevo", okDesc: "El rclone interno vuelve a servir las carpetas cifradas.",
 			ok: func() bool { running, _ := svc.Status()["running"].(bool); return running || len(vault.Folders()) == 0 },
 		})
@@ -78,21 +78,19 @@ func watchHealth(ctx context.Context, sess *webclient.Session, svc *rclonesvc.Se
 	}
 }
 
-// onNetworkChange: la máquina ha pasado del cable al Wi-Fi o al revés. Se cortan las
-// conexiones con Movistar (las subidas en curso fallan y el cliente las reintenta
-// enteras), se relanza el navegador de la sesión web y se avisa por Telegram.
+// onNetworkChange: el equipo ha cambiado de conexión (via es la etiqueta que manda el
+// aviso, p. ej. "wifi"). Se cortan las conexiones con Movistar (las subidas en curso
+// fallan y el cliente las reintenta enteras), se relanza el navegador de la sesión web
+// y se avisa por Telegram.
 func onNetworkChange(via string, sess *webclient.Session) {
 	notifier.ResetConnections()
 	n := sapi.ResetConnections(via)
-	// El aviso no espera al relanzamiento del navegador (tarda de 10 a 20 s).
-	if via == "wifi" {
-		go notifier.Alert("", "📶", "La Pi ha pasado al Wi-Fi",
-			"El cable no tiene conexión: todo sigue por Wi-Fi, más lento. Al volver el cable regresa sola.",
-			fmt.Sprintf("%d peticiones con Movistar reintentadas por la red nueva", n))
-	} else {
-		go notifier.Alert("", "🔌", "La Pi vuelve al cable",
-			"El cable tiene conexión otra vez: todo vuelve a ir por cable.", "")
+	desc := "La conexión del equipo ha cambiado: las peticiones con Movistar se han cortado y se repiten por la red nueva."
+	if via != "" {
+		desc = fmt.Sprintf("La conexión del equipo ha cambiado (ahora: %s): las peticiones con Movistar se han cortado y se repiten por la red nueva.", via)
 	}
+	// El aviso no espera al relanzamiento del navegador (tarda de 10 a 20 s).
+	go notifier.Alert("", "📶", "Cambio de red", desc, fmt.Sprintf("%d peticiones cortadas", n))
 	if sess != nil {
 		if err := sess.ResetNetwork(); err != nil {
 			logger.Log("[WebSession] ❌ No se pudo relanzar el navegador tras el cambio de red: %v", err)

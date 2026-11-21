@@ -16,7 +16,7 @@ func TestReadCopyStatus(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("plan.txt", "Peliculas\nAMC+\nNetflix\n")
+	write("plan.txt", "Peliculas\nAMC+\nVídeos\n")
 	write("progress.log", "2026-11-12 22:43:38 INICIO Peliculas\n2026-11-13 08:10:00 FIN Peliculas rc=0\n2026-11-13 08:10:01 INICIO AMC+\n")
 	write("AMC+.log", "2026/11/13 08:20:00 INFO  :    42.311 GiB / 168.200 GiB, 25%, 31.020 MiB/s, ETA 1h9m\n2026/11/13 08:21:00 ERROR : a.mkv: Failed to copy: 503\n")
 	// El límite de subida ya no es del script de copia: es el común del proxy.
@@ -27,7 +27,7 @@ func TestReadCopyStatus(t *testing.T) {
 	if !st.Enabled || st.Current != "AMC+" {
 		t.Fatalf("esperada copia de AMC+ en curso: %+v", st)
 	}
-	want := map[string]string{"Peliculas": "done", "AMC+": "running", "Netflix": "pending"}
+	want := map[string]string{"Peliculas": "done", "AMC+": "running", "Vídeos": "pending"}
 	for _, l := range st.Libraries {
 		if want[l.Name] != l.State {
 			t.Errorf("%s: estado %q, esperado %q", l.Name, l.State, want[l.Name])

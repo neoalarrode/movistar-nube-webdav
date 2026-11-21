@@ -25,7 +25,7 @@ import (
 //	<biblioteca>.log  log de rclone con --stats-one-line
 //	STOP           motivo de una parada automática (si existe)
 //	stats.json     volcado de "rclone rc core/stats" de la copia (archivos subiéndose)
-//	mount-stats.json  ídem del rclone del montaje de Emby (archivos leyéndose)
+//	mount-stats.json  ídem del rclone del montaje (archivos leyéndose)
 //	control/bwlimit   límite de ancho de banda pedido desde el panel ("off", "20M"...)
 
 type copyLibrary struct {
@@ -343,7 +343,7 @@ func readCopyStatusWith(dir, controlDir string, reads *readTracker) copyStatus {
 }
 
 // applyClientCopies pone en la cabecera el total de las copias que mandan los
-// clientes (p. ej. «Enviar a > Nube» en Windows), si no hay copia del script.
+// clientes (p. ej. un script de copia con rclone), si no hay copia del script.
 func applyClientCopies(st *copyStatus) {
 	copies := webdav.ClientCopies(30 * time.Second)
 	if st.Current != "" || len(copies) == 0 {
@@ -475,13 +475,13 @@ func fillFromProxy(st *copyStatus) {
 }
 
 // copyCloudFolder es la carpeta de la nube donde la copia deja las bibliotecas
-// (COPY_CLOUD_FOLDER, por defecto «emby»): en el panel las rutas empiezan por la
+// (COPY_CLOUD_FOLDER, por defecto «datos»): en el panel las rutas empiezan por la
 // biblioteca.
 func copyCloudFolder() string {
 	if v := strings.Trim(strings.TrimSpace(os.Getenv("COPY_CLOUD_FOLDER")), "/"); v != "" {
 		return v
 	}
-	return "emby"
+	return "datos"
 }
 
 // panelName es el nombre legible de una transferencia, relativo a la carpeta de la copia.

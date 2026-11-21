@@ -10,8 +10,8 @@ import (
 	"movistar-webdav-proxy/internal/logger"
 )
 
-// Corte de las conexiones con Movistar al cambiar la red de la máquina (cable ↔
-// Wi-Fi). Las conexiones abiertas por la red que se ha ido se quedan muertas sin
+// Corte de las conexiones con Movistar al cambiar la red del equipo (p. ej.
+// cable ↔ Wi-Fi). Las conexiones abiertas por la red que se ha ido se quedan muertas sin
 // cerrarse y las peticiones esperan minutos; se cancelan todas para que se abran
 // nuevas por la red buena. Una subida cancelada devuelve error y el cliente (rclone)
 // vuelve a mandar el archivo entero.

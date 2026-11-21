@@ -28,13 +28,13 @@ type decryptedGateway struct {
 	upstream *httputil.ReverseProxy
 	raw      *webdav.Server
 	svc      *rclonesvc.Service
-	// onNetChange se llama cuando la máquina avisa de un cambio de red (cable ↔
-	// Wi-Fi) por networkChangePath; via es «cable» o «wifi».
+	// onNetChange se llama cuando el equipo avisa de un cambio de red por
+	// networkChangePath; via es la etiqueta de la conexión nueva (p. ej. «wifi»).
 	onNetChange func(via string)
 }
 
-// networkChangePath recibe el aviso de cambio de red del script de la máquina
-// (/usr/local/sbin/wifi-respaldo): dentro de Docker el proxy no ve las tarjetas.
+// networkChangePath recibe el aviso de cambio de red de un script del equipo (p. ej.
+// un hook de networkd-dispatcher): dentro de Docker el proxy no ve las tarjetas.
 const networkChangePath = "/.red-cambio"
 
 func newDecryptedGateway(rcloneAddr string, raw *webdav.Server, svc *rclonesvc.Service) *decryptedGateway {
@@ -43,7 +43,7 @@ func newDecryptedGateway(rcloneAddr string, raw *webdav.Server, svc *rclonesvc.S
 	rp.FlushInterval = -1 // descargas y subidas en flujo, sin acumular
 	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		if r.Context().Err() != nil {
-			// El cliente se fue (p. ej. Emby cancela una lectura al saltar): no es un fallo de rclone.
+			// El cliente se fue (p. ej. un reproductor cancela una lectura al saltar): no es un fallo de rclone.
 			return
 		}
 		logger.Log("[Descifrado] ⚠️ %s %s: rclone interno no responde: %v", r.Method, r.URL.Path, err)
@@ -54,7 +54,7 @@ func newDecryptedGateway(rcloneAddr string, raw *webdav.Server, svc *rclonesvc.S
 }
 
 // clientCopyPath recibe el estado de las copias que hacen los clientes con rclone
-// (p. ej. «Enviar a > Nube» en Windows) para que el panel enseñe el total pendiente.
+// (p. ej. un script de copia con rclone) para que el panel enseñe el total pendiente.
 const clientCopyPath = "/.nube-estado"
 
 func (g *decryptedGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -197,7 +197,8 @@ func (s *statusWriter) Flush() {
 	}
 }
 
-// networkChange atiende el aviso de cambio de red (POST con {"via": "cable"|"wifi"}).
+// networkChange atiende el aviso de cambio de red (POST con {"via": "<conexión>"},
+// p. ej. "cable", "wifi" o "lte"; solo es una etiqueta para el aviso).
 func (g *decryptedGateway) networkChange(w http.ResponseWriter, r *http.Request) {
 	if user, pass, ok := r.BasicAuth(); !ok || !g.svc.CheckAuth(user, pass) {
 		w.Header().Set("WWW-Authenticate", `Basic realm="WebDAV"`)
@@ -212,8 +213,9 @@ func (g *decryptedGateway) networkChange(w http.ResponseWriter, r *http.Request)
 		Via string `json:"via"`
 	}
 	_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&body)
-	if body.Via != "wifi" {
-		body.Via = "cable"
+	body.Via = strings.TrimSpace(body.Via)
+	if len(body.Via) > 32 {
+		body.Via = body.Via[:32]
 	}
 	if g.onNetChange != nil {
 		go g.onNetChange(body.Via)

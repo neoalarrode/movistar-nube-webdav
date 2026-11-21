@@ -4091,7 +4091,7 @@ var (
 
 // smallFileCacheBudget es el tope de memoria del contenido de archivos pequeños que
 // se guarda tras leerlos (WEBDAV_SMALLFILE_CACHE_MB, por defecto 32 MB): sin tope, un
-// escaneo de Emby (miles de subtítulos y .nfo en 15 min) acumulaba cientos de MB.
+// escaneo de un servidor multimedia (miles de subtítulos y .nfo en 15 min) acumulaba cientos de MB.
 func smallFileCacheBudget() int64 {
 	if v, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WEBDAV_SMALLFILE_CACHE_MB"))); err == nil && v >= 0 {
 		return int64(v) << 20

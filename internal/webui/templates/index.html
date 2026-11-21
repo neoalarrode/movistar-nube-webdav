@@ -117,7 +117,7 @@
             </div>
         </div>
         <div class="flex items-center space-x-2 self-end sm:self-auto">
-            <a id="update-banner-link" href="https://github.com/uniextra/MovistarWebDAVProxy/releases" target="_blank" rel="noopener" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs transition shadow-sm">
+            <a id="update-banner-link" href="https://github.com/neoalarrode/movistar-nube-webdav/releases" target="_blank" rel="noopener" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-xl text-xs transition shadow-sm">
                 Ver Release en GitHub ↗
             </a>
             <button type="button" onclick="dismissUpdateBanner()" class="p-1.5 text-amber-800 hover:opacity-75 rounded-lg transition" title="Cerrar aviso" aria-label="Cerrar aviso">
@@ -784,7 +784,7 @@
             const parts = [];
             const n = (k, s, p) => `${k} ${k === 1 ? s : p}`;
             if (f.uploads) parts.push(`subiendo ${n(f.uploads, 'archivo', 'archivos')}`);
-            if (f.reads) parts.push(`leyendo ${n(f.reads, 'archivo', 'archivos')} (reproducción o análisis de Emby)`);
+            if (f.reads) parts.push(`leyendo ${n(f.reads, 'archivo', 'archivos')}`);
             if (f.cached) parts.push(`${n(f.cached, 'archivo espera', 'archivos esperan')} en la caché para subirse`);
             const activity = parts.length ? 'Ahora mismo está ' + parts.join(', ') + '.' : 'Ahora mismo no hay actividad en esta carpeta.';
             const copyDesc = {
@@ -796,7 +796,7 @@
                 excluded: 'No está prevista en la copia a la nube.',
                 none: '',
             }[f.copy] || '';
-            const cloudDesc = f.in_cloud ? 'Ya existe en la nube: Emby lee de allí lo que está subido.' : 'Aún no existe en la nube: Emby la lee del NAS.';
+            const cloudDesc = f.in_cloud ? 'Ya existe en la nube.' : 'Aún no existe en la nube.';
             [activity, copyDesc, cloudDesc].filter(Boolean).forEach(t => box.append(el('p', 'text-slate-600 mb-1', t)));
 
             if (f.files && f.files.length) {

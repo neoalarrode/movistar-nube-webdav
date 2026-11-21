@@ -15,22 +15,22 @@ import (
 // «nube:<carpeta>»; el resto de la raíz va tal cual.
 func TestWriteConfig_PerFolder(t *testing.T) {
 	s := New(Options{UpstreamURL: "http://127.0.0.1:8080", User: "u", Pass: "p", ConfigDir: t.TempDir()})
-	pasted := "[movistar]\ntype = webdav\nurl = http://x:5050\n\n[movistar-chunk]\ntype = chunker\nremote = movistar:emby\nchunk_size = 1Gi\nname_format = *-chunk###\nhash_type = none\ntransactions = norename\n\n[movistar-crypt]\ntype = crypt\nremote = movistar-chunk:\npassword = " + mustObscure(t, "clave") + "\n"
+	pasted := "[movistar]\ntype = webdav\nurl = http://x:5050\n\n[movistar-chunk]\ntype = chunker\nremote = movistar:datos\nchunk_size = 1Gi\nname_format = *-chunk###\nhash_type = none\ntransactions = norename\n\n[movistar-crypt]\ntype = crypt\nremote = movistar-chunk:\npassword = " + mustObscure(t, "clave") + "\n"
 	folders := []vault.Folder{
-		{Name: "emby", Config: pasted},
+		{Name: "datos", Config: pasted},
 		{Name: "meloinvento", Config: vault.StandardConfig(vault.Crypt{Password: "otra"})},
 	}
-	path, err := s.writeConfig(folders, []string{"emby", "meloinvento", "Fotos del móvil"})
+	path, err := s.writeConfig(folders, []string{"datos", "meloinvento", "Fotos del móvil"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(path)
 	conf := string(b)
 	for _, want := range []string{"[nube]", "url = http://127.0.0.1:8080",
-		"[c0-movistar-chunk]", "remote = nube:emby", "name_format = *-chunk###", "transactions = norename",
+		"[c0-movistar-chunk]", "remote = nube:datos", "name_format = *-chunk###", "transactions = norename",
 		"[c0-movistar-crypt]", "remote = c0-movistar-chunk:",
 		"[c1-trozos]", "remote = nube:meloinvento", "[c1-cifrada]", "remote = c1-trozos:",
-		"[raiz]", "type = combine", `upstreams = "emby=c0-movistar-crypt:" "meloinvento=c1-cifrada:" "Fotos del móvil=nube:Fotos del móvil"`} {
+		"[raiz]", "type = combine", `upstreams = "datos=c0-movistar-crypt:" "meloinvento=c1-cifrada:" "Fotos del móvil=nube:Fotos del móvil"`} {
 		if !strings.Contains(conf, want) {
 			t.Errorf("falta %q en:\n%s", want, conf)
 		}
@@ -61,9 +61,9 @@ func mustObscure(t *testing.T, v string) string {
 
 // El montaje usa por defecto las mismas opciones que el de producción.
 func TestMountArgs_DefaultsMatchProduction(t *testing.T) {
-	s := New(Options{MountPath: "/mnt/emby_cloud"})
+	s := New(Options{MountPath: "/mnt/nube"})
 	got := strings.Join(s.mountArgs("/tmp/r.conf"), " ")
-	want := "mount raiz: /mnt/emby_cloud --config /tmp/r.conf --allow-other --vfs-cache-mode writes --vfs-cache-max-size 30G --vfs-cache-max-age 1h --cache-dir /app/cache/rclone --vfs-read-chunk-size 32M --vfs-read-chunk-size-limit 256M --dir-cache-time 1000h --attr-timeout 1h --umask 022 --rc --rc-addr 127.0.0.1:5573 --rc-no-auth"
+	want := "mount raiz: /mnt/nube --config /tmp/r.conf --allow-other --vfs-cache-mode writes --vfs-cache-max-size 30G --vfs-cache-max-age 1h --cache-dir /app/cache/rclone --vfs-read-chunk-size 32M --vfs-read-chunk-size-limit 256M --dir-cache-time 1000h --attr-timeout 1h --umask 022 --rc --rc-addr 127.0.0.1:5573 --rc-no-auth"
 	if got != want {
 		t.Errorf("args:\n%s\nesperado:\n%s", got, want)
 	}
@@ -82,7 +82,7 @@ func TestWriteConfig_AutoChunkCap(t *testing.T) {
 	autochunk.Rejected(1<<30, 1<<30)
 	autochunk.Rejected(1<<30, 1<<30)
 	s := New(Options{UpstreamURL: "http://127.0.0.1:8080", ConfigDir: t.TempDir()})
-	path, err := s.writeConfig([]vault.Folder{{Name: "emby", Config: vault.StandardConfig(vault.Crypt{Password: "x"})}}, nil)
+	path, err := s.writeConfig([]vault.Folder{{Name: "datos", Config: vault.StandardConfig(vault.Crypt{Password: "x"})}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

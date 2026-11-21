@@ -16,7 +16,7 @@ pass = y
 [movistar-chunk]
 type = chunker
 chunk_size = 1Gi
-remote = movistar:emby
+remote = movistar:datos
 name_format = *-chunk###
 
 [movistar-crypt]
@@ -29,7 +29,7 @@ directory_name_encryption = true
 `
 
 func TestRemap_ReattachesChainToProxyFolder(t *testing.T) {
-	ch, err := Remap(pasted, "", "nube:emby", "c0-")
+	ch, err := Remap(pasted, "", "nube:datos", "c0-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestRemap_ReattachesChainToProxyFolder(t *testing.T) {
 		t.Fatalf("cadena: %+v", ch)
 	}
 	out := ch.String()
-	for _, want := range []string{"[c0-movistar-crypt]", "remote = c0-movistar-chunk:", "[c0-movistar-chunk]", "remote = nube:emby", "password = AAA"} {
+	for _, want := range []string{"[c0-movistar-crypt]", "remote = c0-movistar-chunk:", "[c0-movistar-chunk]", "remote = nube:datos", "password = AAA"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("falta %q en:\n%s", want, out)
 		}
@@ -65,7 +65,7 @@ func TestRemap_ErrorsAreClear(t *testing.T) {
 // Solo se admiten tipos que transforman lo que va a la nube.
 func TestRemap_RejectsLocalTypes(t *testing.T) {
 	conf := "[c]\ntype = cache\nremote = nube:\nchunk_path = /app/tokens\n"
-	if _, err := Remap(conf, "c", "nube:emby", ""); err == nil || !strings.Contains(err.Error(), "cache") {
+	if _, err := Remap(conf, "c", "nube:datos", ""); err == nil || !strings.Contains(err.Error(), "cache") {
 		t.Fatalf("debía rechazar el tipo cache: %v", err)
 	}
 }

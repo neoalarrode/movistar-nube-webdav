@@ -9,8 +9,8 @@ RUN go mod download
 
 COPY . .
 
-ARG APP_VERSION=v2.6.15
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X movistar-webdav-proxy/internal/config.Version=${APP_VERSION}" -o /movistar-proxy ./cmd/server
+# La versión sale de internal/config/env.go.
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /movistar-proxy ./cmd/server
 
 # Chromium completo de Debian (no headless-shell): mismo motor y huella que un Chrome normal.
 FROM debian:trixie-slim

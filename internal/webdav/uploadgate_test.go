@@ -110,34 +110,34 @@ func TestQueuedUpload_PromotesToStream(t *testing.T) {
 }
 
 func TestBulkPaths(t *testing.T) {
-	done := MarkBulkPath("emby/abc/def")
-	if !isBulkPath("/emby/abc/def-chunk001") || !isBulkPath("/emby/abc/def") || isBulkPath("/emby/abc/otro") {
+	done := MarkBulkPath("datos/abc/def")
+	if !isBulkPath("/datos/abc/def-chunk001") || !isBulkPath("/datos/abc/def") || isBulkPath("/datos/abc/otro") {
 		t.Fatal("prefijo de subida masiva mal resuelto")
 	}
-	done2 := MarkBulkPath("/emby/abc/def/")
+	done2 := MarkBulkPath("/datos/abc/def/")
 	done()
 	done()
-	if !isBulkPath("/emby/abc/def") {
+	if !isBulkPath("/datos/abc/def") {
 		t.Fatal("la segunda marca debe seguir activa")
 	}
 	done2()
-	if isBulkPath("/emby/abc/def") {
+	if isBulkPath("/datos/abc/def") {
 		t.Fatal("marca no liberada")
 	}
 }
 
 func TestExpectUploadSize(t *testing.T) {
-	done := ExpectUploadSize("emby/d/abc", func(p string) int64 {
-		if p == "/emby/d/abc-chunk001_x1y2" {
+	done := ExpectUploadSize("datos/d/abc", func(p string) int64 {
+		if p == "/datos/d/abc-chunk001_x1y2" {
 			return 42
 		}
 		return -1
 	})
-	if expectedUploadSize("/emby/d/abc-chunk001_x1y2") != 42 || expectedUploadSize("/emby/d/abc") != -1 || expectedUploadSize("/emby/otro") != -1 {
+	if expectedUploadSize("/datos/d/abc-chunk001_x1y2") != 42 || expectedUploadSize("/datos/d/abc") != -1 || expectedUploadSize("/datos/otro") != -1 {
 		t.Fatal("tamaño esperado mal resuelto")
 	}
 	done()
-	if expectedUploadSize("/emby/d/abc-chunk001_x1y2") != -1 {
+	if expectedUploadSize("/datos/d/abc-chunk001_x1y2") != -1 {
 		t.Fatal("registro no liberado")
 	}
 }

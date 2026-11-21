@@ -1,6 +1,21 @@
 # Changelog
 
-Todos los cambios notables en **Movistar / O2 Cloud WebDAV Proxy** se documentan en este archivo.
+Todos los cambios notables en **Movistar Nube WebDAV** se documentan en este archivo.
+
+Hasta la entrada «Sin publicar» incluida, el registro es el heredado del proyecto original ([MovistarWebDAVProxy](https://github.com/uniextra/MovistarWebDAVProxy)), del que este nace.
+
+## [v1.0.0] - 2026-11-21
+
+### 🚀 Proyecto independiente
+- **Nuevo repositorio:** **movistar-nube-webdav**, con el historial del fork conservado. Proyecto aparte, centrado en la sesión web de Movistar Cloud.
+- **README propio:** dice el origen (MIT) y que es independiente; `LICENSE` lleva las dos líneas de copyright.
+- **Imagen:** `ghcr.io/neoalarrode/movistar-nube-webdav` para amd64 y arm64, y `docker-compose.web.yml` la descarga.
+- **Versiones:** numeración propia desde `v1.0.0`, y el aviso de nuevas versiones del panel mira este repositorio.
+- **Sin datos de ninguna instalación concreta:**
+  - la carpeta por defecto pasa a ser «datos»;
+  - textos neutros en el bot y en los avisos;
+  - el aviso de cambio de red acepta cualquier etiqueta de conexión;
+  - fuera el instalador de Windows, la pantalla de una Raspberry y el prototipo `webprobe` (ver #3).
 
 ## [Sin publicar]
 

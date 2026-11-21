@@ -14,7 +14,7 @@ import (
 // servicio del host en el montaje de la nube (folders.json) más las del plan de
 // copia que aún no han llegado. Lo que solo está en el NAS y no se copia no sale.
 //
-//	folders.json     {"folders":[{"name":"Peliculas","in_cloud":true}, ...]}  (ls de /mnt/emby_cloud)
+//	folders.json     {"folders":[{"name":"Peliculas","in_cloud":true}, ...]}  (ls de /mnt/nube)
 //	vfs-queue.json   "rclone rc vfs/queue" del montaje: archivos en la caché de escritura
 //	origen-danado.txt  "<carpeta>\t<ruta>\t..." archivos ilegibles en el NAS
 

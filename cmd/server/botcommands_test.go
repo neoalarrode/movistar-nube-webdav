@@ -17,7 +17,7 @@ func TestBotHandle(t *testing.T) {
 	if out := d.handle("nada", ""); !strings.Contains(out, "/ayuda") {
 		t.Fatalf("desconocido: %q", out)
 	}
-	if bar(35) != "▓▓▓░░░░░░░" || shortName("/emby/Disney+/Serie/Season 1/cap.mkv") != "Season 1/cap.mkv" {
+	if bar(35) != "▓▓▓░░░░░░░" || shortName("/datos/Fotos/Serie/Season 1/cap.mkv") != "Season 1/cap.mkv" {
 		t.Fatal("barra o nombre corto")
 	}
 }

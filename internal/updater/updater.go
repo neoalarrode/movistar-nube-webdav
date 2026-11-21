@@ -19,8 +19,8 @@ import (
 )
 
 const (
-	DefaultReleasesAPIURL  = "https://api.github.com/repos/uniextra/MovistarWebDAVProxy/releases/latest"
-	DefaultReleasesPageURL = "https://github.com/uniextra/MovistarWebDAVProxy/releases"
+	DefaultReleasesAPIURL  = "https://api.github.com/repos/neoalarrode/movistar-nube-webdav/releases/latest"
+	DefaultReleasesPageURL = "https://github.com/neoalarrode/movistar-nube-webdav/releases"
 	DefaultCheckInterval   = time.Hour
 	stateFileName          = ".last_notified_release"
 )

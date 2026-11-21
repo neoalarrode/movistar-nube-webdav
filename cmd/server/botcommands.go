@@ -22,8 +22,8 @@ import (
 const folderLimitApprox = 10000
 
 var botCommands = []notifier.Command{
-	{Name: "estado", Description: "Estado general: sesión, descifrado, transferencias y la Pi"},
-	{Name: "progreso", Description: "Progreso de las copias de «Enviar a → Nube»"},
+	{Name: "estado", Description: "Estado general: sesión, descifrado, transferencias y el equipo"},
+	{Name: "progreso", Description: "Progreso de las copias que informan los clientes"},
 	{Name: "subidas", Description: "Subidas en curso, una a una"},
 	{Name: "errores", Description: "Últimos errores y avisos"},
 	{Name: "carpetas", Description: "Carpetas usadas frente al límite de la cuenta"},
@@ -73,7 +73,7 @@ func (d *botDeps) reply(cmd, _ string) string {
 		return d.carpetas()
 	case "ayuda":
 		var b strings.Builder
-		b.WriteString("🤖 <b>Movistar Cloud · Raspberry</b>\n\nPulsa un botón o escribe un comando:\n\n")
+		b.WriteString("🤖 <b>Movistar Nube WebDAV</b>\n\nPulsa un botón o escribe un comando:\n\n")
 		for _, c := range botCommands {
 			fmt.Fprintf(&b, "/%s · %s\n", c.Name, html.EscapeString(c.Description))
 		}
@@ -139,7 +139,7 @@ func (d *botDeps) estado() string {
 func (d *botDeps) progreso() string {
 	copies := webdav.ClientCopies(30 * time.Second)
 	if len(copies) == 0 {
-		return "📦 No hay ninguna copia de «Enviar a → Nube» en curso.\n\nPara ver lo que se está subiendo ahora: /subidas"
+		return "📦 No hay ninguna copia de cliente en curso.\n\nPara ver lo que se está subiendo ahora: /subidas"
 	}
 	var b strings.Builder
 	b.WriteString("📦 <b>Copias en curso</b>\n")

@@ -21,7 +21,7 @@ import (
 type Crypt struct {
 	Password    string `json:"password"`  // en claro en memoria; cifrada en disco
 	Password2   string `json:"password2"` // sal (puede ir vacía)
-	Root        string `json:"root"`      // carpeta(s) cifrada(s) de la raíz de la nube, separadas por comas (p. ej. "emby")
+	Root        string `json:"root"`      // carpeta(s) cifrada(s) de la raíz de la nube, separadas por comas (p. ej. "datos")
 	ChunkSize   string `json:"chunk_size"`
 	NameFormat  string `json:"name_format"`
 	Transaction string `json:"transactions"`
@@ -29,7 +29,7 @@ type Crypt struct {
 
 // Defaults son los valores recomendados (los de la documentación del proxy).
 func Defaults() Crypt {
-	return Crypt{Root: "emby", ChunkSize: "1Gi", NameFormat: "*-chunk###", Transaction: "norename"}
+	return Crypt{Root: "datos", ChunkSize: "1Gi", NameFormat: "*-chunk###", Transaction: "norename"}
 }
 
 var (
