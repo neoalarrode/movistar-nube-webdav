@@ -717,43 +717,6 @@ func TestEmptyFiles_ManifestNotReuploadedWhenUnchanged(t *testing.T) {
 	}
 }
 
-// La relectura tras subir (como la app) deja la URL firmada en la base de metadatos
-// y en la caché de subidas recientes, para que la primera descarga la use.
-func TestMediaRefresh_StoresSignedURL(t *testing.T) {
-	srv, ms, _, cleanup := setupTestWebDAVServerWithDB(t)
-	defer cleanup()
-	fs := srv.FS()
-	_ = ms.UpsertMedia(sapi.MediaItem{ID: "777", Name: "a.bin", FolderID: 200, Size: 3, ETag: "e1"})
-	fs.cacheMu.Lock()
-	fs.uploadCache[cacheKey("/Backups/a.bin")] = &MemoryFile{ID: "777", Name: "a.bin", FolderID: 200, Size: 3}
-	fs.cacheMu.Unlock()
-
-	fs.applyMediaRefresh(sapi.MediaRefresh{ID: "777", URL: "https://cloud/firmada", ETag: "e2", UploadETag: "e1"})
-
-	if m, _ := ms.GetMediaByID("777"); m == nil || m.URL != "https://cloud/firmada" || m.ETag != "e2" {
-		t.Fatalf("base de metadatos = %+v", m)
-	}
-	fs.cacheMu.RLock()
-	mem := fs.uploadCache[cacheKey("/Backups/a.bin")]
-	fs.cacheMu.RUnlock()
-	if mem.URL != "https://cloud/firmada" || !mem.URLConfirmed {
-		t.Fatalf("caché de subidas = %+v", mem)
-	}
-
-	// una relectura de una subida anterior no pisa un archivo que ya cambió
-	_ = ms.UpsertMedia(sapi.MediaItem{ID: "777", Name: "a.bin", FolderID: 200, Size: 5, ETag: "e3", URL: "https://cloud/nueva"})
-	fs.applyMediaRefresh(sapi.MediaRefresh{ID: "777", URL: "https://cloud/vieja", UploadETag: "e1"})
-	if m, _ := ms.GetMediaByID("777"); m == nil || m.URL != "https://cloud/nueva" {
-		t.Fatalf("se pisó un archivo que había cambiado: %+v", m)
-	}
-	fs.cacheMu.RLock()
-	mem = fs.uploadCache[cacheKey("/Backups/a.bin")]
-	fs.cacheMu.RUnlock()
-	if mem.URL == "https://cloud/vieja" {
-		t.Fatal("la caché de subidas tomó la URL de una relectura antigua")
-	}
-}
-
 // Contenedor nuevo o base local borrada: la base no ha cargado nunca el manifiesto de
 // la nube. Aunque un cliente suba algo nada más arrancar (y eso marque cambios
 // pendientes), no se puede subir el estado local, casi vacío, sobre el manifiesto: se

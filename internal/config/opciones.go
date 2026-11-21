@@ -24,10 +24,6 @@ func CaseInsensitiveNames() bool {
 	return true
 }
 
-// RefreshAfterUpload (SAPI_REFRESH_AFTER_UPLOAD, por defecto true): releer cada
-// archivo subido, como la app, para guardar su URL de descarga firmada.
-func RefreshAfterUpload() bool { return envBool("SAPI_REFRESH_AFTER_UPLOAD", true) }
-
 // UnsupportedAsFile (SAPI_UNSUPPORTED_AS_FILE, por defecto false): si O2 rechaza una
 // imagen, audio o vídeo porque su contenido no corresponde a la extensión (MED-1050),
 // volver a subirlo como archivo genérico (upload/file) para que no se pierda. La app
@@ -39,13 +35,6 @@ func UnsupportedAsFile() bool { return envBool("SAPI_UNSUPPORTED_AS_FILE", false
 // terminan en punto y los que terminan en .tmp). Ver internal/sapi/nombres.go.
 func EscapeNames() bool { return envBool("SAPI_ESCAPE_NAMES", true) }
 
-// Latido como la app: system/information cada HeartbeatInterval y el resto de
-// consultas periódicas cada HeartbeatFullInterval.
-func HeartbeatInterval() time.Duration { return envSeconds("SAPI_HEARTBEAT_SEC", 60*time.Second) }
-func HeartbeatFullInterval() time.Duration {
-	return envSeconds("SAPI_HEARTBEAT_FULL_SEC", 300*time.Second)
-}
-
 // Seguimiento de la validación tras subir: primera consulta a los
 // ValidationFirstWait, luego cada vez más espaciadas hasta ValidationMaxWait; se deja
 // tras ValidationMaxFailures consultas fallidas seguidas.
@@ -53,27 +42,6 @@ func ValidationFirstWait() time.Duration {
 	return envSeconds("SAPI_VALIDATION_FIRST_SEC", 10*time.Second)
 }
 func ValidationMaxWait() time.Duration { return envSeconds("SAPI_VALIDATION_MAX_SEC", 60*time.Second) }
-func ValidationMaxFailures() int       { return envInt("SAPI_VALIDATION_MAX_FAILURES", 60) }
-
-// Envío del contenido de una subida: UploadAttempts intentos (con reanudación entre
-// ellos), con esperas crecientes (2, 5, 10, 20, 30, 45, 60 s…) de hasta
-// UploadRetryMaxWait.
-func UploadAttempts() int { return envInt("SAPI_UPLOAD_ATTEMPTS", 8) }
-func UploadRetryMaxWait() time.Duration {
-	return envSeconds("SAPI_UPLOAD_RETRY_MAX_SEC", 60*time.Second)
-}
-
-// Login fallido en el perfil desktop: reintento a los LoginRetryFirstWait, que se
-// dobla hasta LoginRetryMaxWait; la sesión se da por caducada solo tras
-// LoginGiveUpRejections rechazos de credenciales durante al menos LoginGiveUpAfter.
-func LoginRetryFirstWait() time.Duration {
-	return envSeconds("SAPI_LOGIN_RETRY_FIRST_SEC", 30*time.Second)
-}
-func LoginRetryMaxWait() time.Duration {
-	return envSeconds("SAPI_LOGIN_RETRY_MAX_SEC", 600*time.Second)
-}
-func LoginGiveUpRejections() int      { return envInt("SAPI_LOGIN_GIVEUP_REJECTIONS", 4) }
-func LoginGiveUpAfter() time.Duration { return envSeconds("SAPI_LOGIN_GIVEUP_SEC", 1800*time.Second) }
 
 // EmptyManifestRetryWait (WEBDAV_EMPTY_MANIFEST_RETRY_SEC): si no se pudo subir el
 // manifiesto de archivos vacíos, se reintenta tras esta espera.

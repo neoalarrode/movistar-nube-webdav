@@ -58,12 +58,6 @@ type EmptyFileManager struct {
 	// cargado ni subido un manifiesto no puede subir el suyo: lo pisaría con un estado
 	// casi vacío (contenedor nuevo, base local borrada…).
 	bootstrapped atomic.Bool
-	// migrating: hay en marcha una subida a la nube de los vacíos que siguen emulados
-	// (ver startMigration).
-	migrating atomic.Bool
-	// migrateAgain: se pidió otra migración mientras había una en marcha (el manifiesto
-	// se carga más de una vez al arrancar); se repite al terminar.
-	migrateAgain atomic.Bool
 }
 
 func NewEmptyFileManager(mfs *MovistarFS) *EmptyFileManager {
@@ -278,7 +272,6 @@ func (efm *EmptyFileManager) BootstrapLoad() {
 	}
 	efm.bootstrapMu.Lock()
 	defer efm.bootstrapMu.Unlock()
-	defer efm.startMigration()
 
 	ms := efm.mfs.MetadataStore()
 	if ms == nil || efm.mfs.client == nil {
@@ -380,66 +373,6 @@ func (efm *EmptyFileManager) BootstrapLoad() {
 		logger.Log("[EmptyFiles] 🧹 Descartados archivos efímeros (locks/estados transitorios) del manifiesto; reescribiendo limpio...")
 		efm.ScheduleSave()
 	}
-}
-
-// startMigration: con los vacíos de verdad (MovistarFS.realEmptyFiles), los que siguen
-// emulados (creados antes de activarlo, o cargados del manifiesto de la nube) se suben
-// a la nube una vez resuelto el manifiesto en este arranque. Va en segundo plano.
-func (efm *EmptyFileManager) startMigration() {
-	if !efm.bootstrapped.Load() || !efm.mfs.realEmptyFiles() {
-		return
-	}
-	if !efm.migrating.CompareAndSwap(false, true) {
-		efm.migrateAgain.Store(true)
-		return
-	}
-	go func() {
-		for {
-			efm.migrateToCloud()
-			efm.migrating.Store(false)
-			if !efm.migrateAgain.Swap(false) || !efm.migrating.CompareAndSwap(false, true) {
-				return
-			}
-		}
-	}()
-}
-
-// migrateToCloud sube como archivos reales de 0 bytes los vacíos emulados que no sean
-// de bloqueo o control. Si en la nube ya hay un archivo con ese nombre (subido de
-// verdad en un arranque anterior), solo se quita el emulado. Los que O2 no admite o
-// fallan se quedan emulados y en el manifiesto, que tras la migración solo contiene
-// esos; se vuelven a intentar en el próximo arranque.
-func (efm *EmptyFileManager) migrateToCloud() {
-	ms := efm.mfs.MetadataStore()
-	if ms == nil || efm.mfs.client == nil {
-		return
-	}
-	files, err := ms.ListAllVirtualEmptyFiles()
-	if err != nil {
-		logger.Log("[EmptyFiles] ⚠️ No se pudieron listar los vacíos emulados para subirlos: %v", err)
-		return
-	}
-	subidos, yaEstaban, fallidos := 0, 0, 0
-	enNube := map[int64]map[string]bool{} // carpeta → nombres que hay en la nube (listado real)
-	for _, f := range files {
-		clean := path.Clean("/" + f.Path)
-		if isEphemeralEmptyFile(clean) || isInternalProxyPath(clean) {
-			continue
-		}
-		switch efm.migrateOne(ms, clean, f.ModTime, enNube) {
-		case migratedUploaded:
-			subidos++
-		case migratedAlreadyReal:
-			yaEstaban++
-		default:
-			fallidos++
-		}
-	}
-	if subidos+yaEstaban+fallidos == 0 {
-		return
-	}
-	logger.Log("[EmptyFiles] ☁️ Vacíos emulados pasados a la nube: %d subidos, %d ya estaban, %d siguen emulados", subidos, yaEstaban, fallidos)
-	efm.ScheduleSave() // el manifiesto queda solo con los que siguen emulados
 }
 
 type migrateResult int
