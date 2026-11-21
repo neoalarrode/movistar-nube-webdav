@@ -6,24 +6,17 @@ import (
 	"movistar-webdav-proxy/internal/webdav"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
 
-// El flujo envía el estado al conectar y otra vez en cuanto cambia un archivo.
+// El flujo envía el estado al conectar y otra vez en cuanto cambia la actividad.
 func TestCopyEvents_PushesOnChange(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, content string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("plan.txt", "A\nB\n")
-	write("progress.log", "2026-11-14 10:00:00 INICIO A\n")
-	s := &Server{copyDir: dir, reads: newReadTracker(time.Minute)}
+	old := webdav.Transfers
+	webdav.Transfers = webdav.NewTransferTracker(time.Minute)
+	t.Cleanup(func() { webdav.Transfers = old })
+	s := &Server{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -58,11 +51,12 @@ func TestCopyEvents_PushesOnChange(t *testing.T) {
 			return ""
 		}
 	}
-	if e := next(); !strings.Contains(e, `"current":"A"`) {
+	if e := next(); !strings.Contains(e, `"uploading":[]`) {
 		t.Fatalf("primer evento: %s", e)
 	}
-	write("progress.log", "2026-11-14 10:00:00 INICIO A\n2026-11-14 10:05:00 FIN A rc=0\n2026-11-14 10:05:01 INICIO B\n")
-	if e := next(); !strings.Contains(e, `"current":"B"`) {
+	h := webdav.Transfers.Start("upload", "/datos/a.bin", 10<<20, 0)
+	defer h.Done()
+	if e := next(); !strings.Contains(e, `"name":"datos/a.bin"`) {
 		t.Fatalf("tras el cambio: %s", e)
 	}
 }
@@ -74,7 +68,7 @@ func TestCopySignature_IncludesProxyActivity(t *testing.T) {
 	t.Cleanup(func() { webdav.Transfers = old })
 	s := &Server{}
 	before := s.copySignature()
-	h := webdav.Transfers.Start("upload", "/datos/a.mkv", 10<<20, 0)
+	h := webdav.Transfers.Start("upload", "/datos/a.bin", 10<<20, 0)
 	defer h.Done()
 	if s.copySignature() == before {
 		t.Fatal("una subida nueva debe cambiar la señal")
