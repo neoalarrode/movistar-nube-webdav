@@ -103,7 +103,7 @@ Cualquier cliente WebDAV sirve: el Explorador de Windows, el Finder, `davfs2`, r
 
 ## 🚧 Estado del proyecto
 
-El código todavía arrastra el modo nativo del proyecto original (inicio de sesión por SMS/OAuth e imitación de la app de escritorio). Se está retirando por fases: [#1](https://github.com/neoalarrode/movistar-nube-webdav/issues/1). El trabajo se organiza con [issues](https://github.com/neoalarrode/movistar-nube-webdav/issues) y pull requests.
+El modo nativo heredado del proyecto original (inicio de sesión por SMS/OAuth e imitación de la app de escritorio) ya está retirado ([#1](https://github.com/neoalarrode/movistar-nube-webdav/issues/1)): el proxy funciona solo con la sesión web y tiene una única imagen. El trabajo se organiza con [issues](https://github.com/neoalarrode/movistar-nube-webdav/issues) y pull requests.
 
 ## 📄 Licencia
 

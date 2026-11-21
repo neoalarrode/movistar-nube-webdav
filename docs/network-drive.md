@@ -1,6 +1,6 @@
-# Mapear Movistar / O2 Cloud como Unidad de Red 💻📂
+# Mapear Movistar Cloud como Unidad de Red 💻📂
 
-Esta guía detalla paso a paso cómo montar tu almacenamiento de Movistar u O2 Cloud como un disco local o unidad de red en **Windows**, **macOS**, **Linux** y **Synology DSM (File Station)** a través del proxy WebDAV.
+Esta guía detalla paso a paso cómo montar tu almacenamiento de Movistar Cloud como un disco local o unidad de red en **Windows**, **macOS**, **Linux** y **Synology DSM (File Station)** a través del proxy WebDAV.
 
 > [!NOTE]
 > A partir de la versión **v2.0.5**, el proxy incorpora un sistema de absorción silenciosa de archivos basura (*DevNull Absorber*). Puedes navegar, crear y mover archivos sin preocuparte de que metadatos como `desktop.ini`, `.DS_Store`, `thumbs.db` o carpetas de papelera se suban a tu nube.
@@ -8,7 +8,7 @@ Esta guía detalla paso a paso cómo montar tu almacenamiento de Movistar u O2 C
 ---
 
 > [!NOTE]
-> **Mayúsculas y minúsculas:** O2 Cloud distingue `Foto.jpg` de `foto.jpg`, y con O2 el proxy también: busca los nombres exactos. El Explorador de Windows, el Finder de macOS y otros clientes que no distinguen mayúsculas pueden pedir un archivo con otras mayúsculas y no encontrarlo. Si montas la nube con el cliente nativo de Windows o de macOS, puedes activar `WEBDAV_CASE_INSENSITIVE=true`: si no hay un archivo con el nombre exacto, se usa el que solo difiere en mayúsculas. No lo actives si usas también rclone, restic o Hyper Backup contra el mismo proxy (ver [configuración](configuration.md)).
+> **Mayúsculas y minúsculas:** la nube distingue `Foto.jpg` de `foto.jpg`. Por defecto el proxy busca sin distinguirlas (`WEBDAV_CASE_INSENSITIVE=true`), lo cómodo para el Explorador de Windows o el Finder, que piden los archivos con otras mayúsculas. Si usas rclone, restic o Hyper Backup contra el mismo proxy, pon `WEBDAV_CASE_INSENSITIVE=false` (ver [configuración](configuration.md)).
 
 ## 🪟 1. Windows
 
@@ -104,7 +104,7 @@ net use M: http://TU_IP_SERVIDOR:5050 /user:TU_USUARIO TU_PASSWORD /persistent:n
 ```
 
 > [!WARNING]
-> **Límite de 4 GB por archivo en Movistar / O2 Cloud:**  
+> **Límite de 4 GB por archivo en Movistar Cloud:**  
 > La API de Telefónica no admite archivos individuales mayores a 4 GB (4096 MB). Si necesitas almacenar archivos gigantes (por ejemplo imágenes ISO de más de 4 GB), puedes configurar un remoto secundario tipo [`chunker`](https://rclone.org/chunker/) sobre tu remoto `movistar:` para fragmentarlos de forma transparente. Usa la [configuración recomendada de Rclone](backup-clients.md#-configuración-avanzada-archivos-de-más-de-4-gb-chunker-y-cifrado-crypt) (`name_format = *-chunk###` y `transactions = norename`): con la de por defecto, cada trozo se renombra cambiando de extensión y el proxy tiene que volver a subirlo entero.
 
 ---
@@ -249,4 +249,4 @@ Al trabajar con carpetas compartidas en red, los tres sistemas operativos genera
 * **macOS:** `.DS_Store`, archivos AppleDouble `._*`, `.Spotlight-V100`, `.Trashes`, `.fseventsd`.
 * **Linux:** Carpetas `.Trash-*` y `.directory`.
 
-Todas las operaciones de creación sobre estos elementos reciben respuesta satisfactoria inmediata sin generar tráfico hacia Movistar/O2 Cloud ni lanzar errores en tu equipo.
+Todas las operaciones de creación sobre estos elementos reciben respuesta satisfactoria inmediata sin generar tráfico hacia Movistar Cloud ni lanzar errores en tu equipo.

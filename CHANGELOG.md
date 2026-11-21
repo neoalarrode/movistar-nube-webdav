@@ -4,6 +4,30 @@ Todos los cambios notables en **Movistar Nube WebDAV** se documentan en este arc
 
 Hasta la entrada «Sin publicar» incluida, el registro es el heredado del proyecto original ([MovistarWebDAVProxy](https://github.com/uniextra/MovistarWebDAVProxy)), del que este nace.
 
+## [Sin publicar]
+
+### 🧹 Fuera el modo nativo (#1)
+- **Fuera el perfil de escritorio:**
+  - la imitación de la app oficial (huella `o2Windows`, cabeceras, latido y arranque);
+  - su subida en dos pasos con reanudación;
+  - sus metadatos y borrados «como la app» y los vacíos reales.
+- **Fuera el inicio de sesión por SMS/OAuth:**
+  - la tarjeta de vinculación del panel y sus rutas;
+  - el flujo OAuth (PKCE, canje, renovación en `apiseg`);
+  - la cabecera `Authorization: oauth`;
+  - las cuentas por teléfono (`account_<teléfono>.env`).
+- **Una sola imagen:** `Dockerfile` (con Chromium) y `docker-compose.yml`. El modo web está activo por defecto.
+- **Valores por defecto, los de la web:**
+  - 4 descargas y 2 subidas;
+  - cambios cada 60 s;
+  - nombres sin distinguir mayúsculas;
+  - sin copia local ni cola en disco.
+- **Sin cambios:** se mantiene lo de Hyper Backup, Duplicati y NTLM (compatibilidad de clientes WebDAV, independiente del modo).
+- **Documentación** reescrita solo para el modo web.
+
+### 🖥️ Panel
+- Fuera la tarjeta de la copia de un script externo (`COPY_STATUS_DIR`): la actividad sale del proxy y del informe de copias de los clientes (#2).
+
 ## [v1.0.0] - 2026-11-21
 
 ### 🚀 Proyecto independiente

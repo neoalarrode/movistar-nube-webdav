@@ -1,17 +1,11 @@
-# 🌐 Modo web (opcional)
+# 🌐 Modo web
 
-En el modo web el proxy no usa el inicio de sesión del cliente de escritorio
-(OAuth `omh windows client`), sino **la misma sesión que la web oficial**
+El proxy usa **la misma sesión que la web oficial** de Movistar Cloud
 (`micloud.movistar.es`): un Chromium sin pantalla dentro del contenedor guarda la
-sesión y las llamadas a SAPI se hacen desde esa pestaña, igual que la web.
-
-Por ahora es **solo para Movistar Cloud** (`micloud.movistar.es`); no está probado
-con O2 Cloud.
-
-Úsalo si el emparejamiento por SMS del cliente de escritorio falla o CloudFront lo
-bloquea (`403`), o si prefieres que el tráfico sea idéntico al de la web. El modo
-normal no cambia y sigue siendo el recomendado si te funciona: su imagen ocupa
-~20 MB; la del modo web, varios cientos de MB por Chromium.
+sesión y las llamadas a SAPI se hacen desde esa pestaña, igual que la web. Es el
+único modo de funcionamiento del proyecto: al comportarse como la web oficial, no
+choca con el cortafuegos de Movistar (CloudFront), que bloquea a los clientes que no
+se parecen a ninguno de los suyos.
 
 ## Puesta en marcha
 
@@ -19,8 +13,7 @@ normal no cambia y sigue siendo el recomendado si te funciona: su imagen ocupa
 docker compose up -d
 ```
 
-1. Abre el panel (`http://IP_DE_TU_SERVIDOR:5000`). La tarjeta **Sesión web**
-   sustituye a la de vinculación.
+1. Abre el panel (`http://IP_DE_TU_SERVIDOR:5000`) y busca la tarjeta **Sesión web**.
 2. Pulsa **🔐 Abrir inicio de sesión**: verás la página de Movistar Cloud del
    Chromium del contenedor y podrás usarla con el ratón y el teclado.
 3. Entra con **«Inicia sesión con e-mail y contraseña»** y marca **«No cerrar
@@ -99,12 +92,12 @@ papelera.
 | `CHROME_NO_SANDBOX` | `false` (`true` en la imagen) | Lanza Chromium sin sandbox (necesario como root en contenedores). |
 | `WEB_SESSION_RENEW_BEFORE` | `1h` | Margen antes de la caducidad de 24 h para renovar la sesión. |
 | `WEB_TRASH_EMPTY_EVERY` | *(desactivado)* | Vaciado periódico de la papelera (p. ej. `6h`; mínimo `1m`). |
-| `WEBDAV_MAX_DOWNLOADS` | `1` (`4` en modo web) | Descargas simultáneas a la nube. |
-| `WEBDAV_MAX_UPLOADS` | `1` (`2` en modo web) | Subidas simultáneas a la nube. |
-| `SAPI_MAX_CONCURRENT` | `1` (en modo web, descargas + subidas + 2) | Llamadas simultáneas a SAPI. |
-| `WEBDAV_UPLOAD_SPOOL` | `false` en modo web (`true` en `desktop`) | Copia local de cada subida mientras se envía. En modo web no: la subida va en flujo directo y, si falla, el `PUT` responde `503` para que el cliente la repita. |
+| `WEBDAV_MAX_DOWNLOADS` | `4` | Descargas simultáneas a la nube. |
+| `WEBDAV_MAX_UPLOADS` | `2` | Subidas simultáneas a la nube. |
+| `SAPI_MAX_CONCURRENT` | descargas + subidas + 2 | Llamadas simultáneas a SAPI. |
+| `WEBDAV_UPLOAD_SPOOL` | `false` | Copia local de cada subida mientras se envía. Sin ella, la subida va en flujo directo y, si falla, el `PUT` responde `503` para que el cliente la repita. |
 | `WEBDAV_QUEUE_RAM_MB` | solo los búferes de las subidas en curso | RAM total para subidas que esperan hueco. Se ajusta a la memoria libre del equipo. Con la cola llena, el proxy deja de leer del cliente (contrapresión). |
-| `WEBDAV_QUEUE_DISK_MB` | `0` en modo web (sin límite en `desktop`) | Disco para subidas en cola cuando no caben en RAM. |
+| `WEBDAV_QUEUE_DISK_MB` | `0` | Disco para subidas en cola cuando no caben en RAM. |
 | `WEBDAV_UPLOAD_BWLIMIT` | *(sin límite)* | Límite de subida (p. ej. `20M`, también desde el panel). |
 | `WEBDAV_SMALLFILE_CACHE_MB` | `32` | Memoria para el contenido de archivos pequeños ya leídos. |
 | `DOWNLOAD_URL_MAX_AGE` | `1h` | Cuánto se reutiliza una URL de descarga firmada. |
