@@ -527,10 +527,6 @@ func (c *Client) appendValidationKey(rawURL string) string {
 	if err != nil {
 		return rawURL
 	}
-	// La app oficial pide system/information sin validationkey.
-	if strings.HasSuffix(parsed.Path, "/system/information") && auth.IsDesktopProfile() {
-		return rawURL
-	}
 	// Una URL que ya trae validationkey (p. ej. la URL firmada de descarga de un
 	// archivo) se envía tal cual: cambiar la clave o reordenar la query invalida la
 	// firma y la descarga responde 403.
@@ -593,16 +589,6 @@ func (c *Client) processSAPIResponse(resp *http.Response) bool {
 			if rotated.LastRefreshDate > 0 && rotated.LastRefreshDate != c.cfg.LastRefreshDate {
 				c.cfg.LastRefreshDate = rotated.LastRefreshDate
 				changed = true
-			} else if rotated.LastRefreshDate <= 0 && rotated.AccessToken != "" && resp.StatusCode < 400 && auth.IsDesktopProfile() {
-				// Así renueva el cliente oficial de escritorio: cuando
-				// lastrefreshdate + expiresin ya ha pasado, envía la petición igual y
-				// SAPI responde 200 con una cabecera Authorization (en la captura,
-				// con los mismos tokens y sin lastrefreshdate). El cliente guarda lo
-				// recibido y pone lastrefreshdate a la hora de esa respuesta. Nunca
-				// llama a apiseg.telefonica.es para renovar.
-				c.cfg.LastRefreshDate = time.Now().UnixMilli()
-				changed = true
-				tokensRotated = true
 			}
 			if rotated.ExpiresIn != "" && rotated.ExpiresIn != c.cfg.ExpiresIn {
 				c.cfg.ExpiresIn = rotated.ExpiresIn
@@ -632,9 +618,7 @@ func (c *Client) processSAPIResponse(resp *http.Response) bool {
 		// 3. Ventana deslizante de LastRefreshDate: SAPI rechaza cabeceras oauth cuando
 		// (now - lastrefreshdate) supera expiresin (3600s). Durante copias largas (>= 1h),
 		// si las peticiones 2xx siguen siendo válidas y han pasado > 25 min, refrescamos el timestamp.
-		// En el perfil "desktop" no se usa: el cliente oficial mantiene la fecha real
-		// y SAPI la renueva con la cabecera Authorization de la respuesta.
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 && c.cfg.AccessToken != "" && !auth.IsDesktopProfile() {
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 && c.cfg.AccessToken != "" {
 			if c.cfg.LastRefreshDate > 1750000000000 && time.Since(time.UnixMilli(c.cfg.LastRefreshDate)) > 25*time.Minute {
 				c.cfg.LastRefreshDate = time.Now().UnixMilli()
 				changed = true
@@ -748,21 +732,6 @@ func (c *Client) refreshSessionInternal(forceOAuth bool) (bool, bool) {
 
 	if cfg.AccessToken == "" && cfg.RefreshToken == "" {
 		return false, false
-	}
-
-	// Tras un login fallido no se vuelve a intentar hasta que pasa la espera: cada
-	// 401 de las peticiones en curso pediría otro login y O2 (CloudFront/WAF)
-	// bloquea las ráfagas de logins.
-	if !forceOAuth && auth.IsDesktopProfile() {
-		c.mu.RLock()
-		retryAt := c.loginRetryAt
-		c.mu.RUnlock()
-		if time.Now().Before(retryAt) {
-			c.mu.Lock()
-			c.refreshTransient = true
-			c.mu.Unlock()
-			return false, true
-		}
 	}
 
 	logger.Log("[OAuth] 🔄 Renovando sesión SAPI...")
@@ -984,14 +953,8 @@ func (c *Client) refreshSessionInternal(forceOAuth bool) (bool, bool) {
 	return false, true
 }
 
-// apisegRefreshAllowed indica si se puede canjear el refresh_token en apiseg:
-// siempre en el perfil "browser"; en "desktop", solo con OAUTH_REFRESH_FALLBACK=true.
-func apisegRefreshAllowed() bool {
-	if !auth.IsDesktopProfile() {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("OAUTH_REFRESH_FALLBACK")), "true")
-}
+// apisegRefreshAllowed indica si se puede canjear el refresh_token en apiseg.
+func apisegRefreshAllowed() bool { return true }
 
 func isTerminalRefreshError(err error) bool {
 	if err == nil {
@@ -1089,36 +1052,24 @@ func (c *Client) doRequestLocked(req *http.Request) (*http.Response, error) {
 	c.mu.RUnlock()
 
 	// Inyectar cabeceras comunes
-	desktop := auth.IsDesktopProfile()
 	userAgent := auth.GetSAPIUserAgent()
 	req.Header.Set("User-Agent", userAgent)
 	if req.Header.Get("Accept") == "" {
 		req.Header.Set("Accept", "*/*")
 	}
-	if desktop {
-		// Mismas cabeceras que el cliente oficial de escritorio (sin Referer,
-		// X-Requested-With ni X-devicename; x-request-id por petición).
-		if req.Header.Get("Accept-Language") == "" {
-			req.Header.Set("Accept-Language", auth.DesktopAcceptLanguage)
-		}
-		if req.Header.Get("x-request-id") == "" {
-			req.Header.Set("x-request-id", auth.NewRequestID())
-		}
-	} else {
-		if req.Header.Get("Referer") == "" && req.URL != nil && req.URL.Host != "" {
-			req.Header.Set("Referer", req.URL.Scheme+"://"+req.URL.Host+"/")
-		}
-		if req.Header.Get("X-Requested-With") == "" {
-			req.Header.Set("X-Requested-With", "XMLHttpRequest")
-		}
-		if req.Header.Get("Accept-Language") == "" {
-			req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
-		}
+	if req.Header.Get("Referer") == "" && req.URL != nil && req.URL.Host != "" {
+		req.Header.Set("Referer", req.URL.Scheme+"://"+req.URL.Host+"/")
+	}
+	if req.Header.Get("X-Requested-With") == "" {
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	}
+	if req.Header.Get("Accept-Language") == "" {
+		req.Header.Set("Accept-Language", "es-ES,es;q=0.9,en;q=0.8")
 	}
 	if cfg.DeviceID != "" {
 		req.Header.Set("X-deviceid", auth.SanitizeDeviceID(cfg.DeviceID))
 	}
-	if cfg.DeviceName != "" && !desktop {
+	if cfg.DeviceName != "" {
 		req.Header.Set("X-devicename", cfg.DeviceName)
 	}
 	if cfg.AccessToken != "" {
@@ -1254,7 +1205,7 @@ func sessionCookieHeader(jsessionID, validationKey string) string {
 	if jsessionID != "" {
 		parts = append(parts, "JSESSIONID="+jsessionID)
 	}
-	if validationKey != "" && (!auth.IsDesktopProfile() || jsessionID == "") {
+	if validationKey != "" {
 		parts = append(parts, "validationKey="+validationKey)
 		parts = append(parts, "validationkey="+validationKey)
 	}

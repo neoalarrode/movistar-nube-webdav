@@ -8,72 +8,20 @@ import (
 	"time"
 )
 
-// Opciones del perfil desktop: el proxy hablando con la nube como el cliente
-// oficial de Windows. Están todas aquí, cada una con su variable de entorno y su
-// valor por defecto, y documentadas en docs/configuration.md. Se leen al usarlas,
-// así que no hay que reiniciar nada más que el proceso para cambiarlas.
-//
-// Los valores por defecto que imitan a la app (latido, validación) salen de las
-// capturas de noviembre de 2026; cambiarlos aleja al proxy del comportamiento del
-// cliente oficial.
-
-// Perfil con el que el proxy se presenta ante SAPI (SAPI_CLIENT_PROFILE).
-const (
-	ProfileDesktop = "desktop"
-	ProfileBrowser = "browser"
-)
-
-// ClientProfile devuelve el perfil activo: "desktop" (por defecto), o "browser" con
-// SAPI_CLIENT_PROFILE=browser o en modo web (WEB_SESSION=true).
-func ClientProfile() string {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("SAPI_CLIENT_PROFILE"))) {
-	case "browser", "web", "chrome":
-		return ProfileBrowser
-	case "desktop", "windows":
-		return ProfileDesktop
-	}
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("WEB_SESSION")), "true") {
-		return ProfileBrowser
-	}
-	return ProfileDesktop
-}
-
-// IsDesktopProfile indica si el proxy imita al cliente oficial de escritorio.
-func IsDesktopProfile() bool {
-	return ClientProfile() == ProfileDesktop
-}
-
-// OfficialClient (SAPI_OFFICIAL_CLIENT, por defecto true): con el perfil desktop, el
-// proxy habla como el cliente oficial (subida en dos pasos, reanudación, latido,
-// relectura, seguimiento de la validación, borrados y metadatos como la app). Movistar
-// Cloud y O2 Cloud son el mismo servicio, así que vale igual para los dos (probado con
-// O2 y con Movistar). Con false, nunca: subida multipart y operaciones de antes.
-// Fuera del perfil desktop, tampoco.
-func OfficialClient() bool {
-	return IsDesktopProfile() && envBool("SAPI_OFFICIAL_CLIENT", true)
-}
-
-// StreamUploads (WEBDAV_STREAM_UPLOAD): subir a la nube mientras el archivo llega del
-// cliente, como la app. Sin la variable, sí donde se habla como la app
-// (OfficialClient) y no en el resto, como antes.
-func StreamUploads() bool {
-	if v, ok := envBoolSet("WEBDAV_STREAM_UPLOAD"); ok {
-		return v
-	}
-	return OfficialClient()
-}
+// Opciones del proxy, cada una con su variable de entorno y su valor por defecto,
+// documentadas en docs/configuration.md. Se leen al usarlas.
 
 // CaseInsensitiveNames (WEBDAV_CASE_INSENSITIVE): buscar nombres sin distinguir
 // mayúsculas. La nube las distingue («A.txt» y «a.txt» son dos archivos), y
 // responder a «a.txt» con «A.txt» hacía que rclone diera por subido un archivo que no
-// lo estaba o, en un cambio solo de mayúsculas, borrara el origen. Sin la variable,
-// nombres exactos donde se habla como la app y, en el resto, sin distinguir, como
-// antes.
+// lo estaba o, en un cambio solo de mayúsculas, borrara el origen. Por defecto, sin
+// distinguir (cómodo con el Explorador de Windows o el Finder); con rclone o restic
+// conviene WEBDAV_CASE_INSENSITIVE=false.
 func CaseInsensitiveNames() bool {
 	if v, ok := envBoolSet("WEBDAV_CASE_INSENSITIVE"); ok {
 		return v
 	}
-	return !OfficialClient()
+	return true
 }
 
 // RefreshAfterUpload (SAPI_REFRESH_AFTER_UPLOAD, por defecto true): releer cada
@@ -85,18 +33,6 @@ func RefreshAfterUpload() bool { return envBool("SAPI_REFRESH_AFTER_UPLOAD", tru
 // volver a subirlo como archivo genérico (upload/file) para que no se pierda. La app
 // oficial no lo hace: deja el archivo sin subir. Solo para archivos nuevos.
 func UnsupportedAsFile() bool { return envBool("SAPI_UNSUPPORTED_AS_FILE", false) }
-
-// RealEmptyFiles (WEBDAV_REAL_EMPTY_FILES, por defecto true): los archivos de 0 bytes
-// se suben a la nube como cualquier otro (registro con size 0 y envío vacío), en vez
-// de emularse en SQLite y en el manifiesto .movistar-webdav-proxy/empty-files.json.
-// O2 los guarda y los devuelve como cualquier archivo (comprobado el 19/11/2026); así
-// una copia (Hyper Backup, por ejemplo) se puede recuperar desde un equipo y un proxy
-// nuevos sin depender del manifiesto. La app oficial no sube vacíos, pero porque los
-// ignora, no porque O2 no los admita. Solo donde se habla como la app
-// (OfficialClient): es la subida comprobada. Con false, la emulación de antes.
-func RealEmptyFiles() bool {
-	return OfficialClient() && envBool("WEBDAV_REAL_EMPTY_FILES", true)
-}
 
 // EscapeNames (SAPI_ESCAPE_NAMES, por defecto true): guardar en la nube, cambiando un
 // punto por «%2E», los nombres de archivo que O2 no admite (los que empiezan o

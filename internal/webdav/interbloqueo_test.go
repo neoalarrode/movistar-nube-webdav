@@ -150,7 +150,10 @@ func TestInterbloqueo_FlujoGrandeYPequeno(t *testing.T) {
 }
 
 // A y B grandes: B no puede subir en flujo (turno ocupado) y debe ir entero al spool.
+// Sin cola en disco el proxy deja de leer a B (contrapresión) y un cliente que
+// multiplexa subidas se bloquea: para esos clientes, WEBDAV_QUEUE_DISK_MB.
 func TestInterbloqueo_DosFlujosGrandes(t *testing.T) {
+	t.Setenv("WEBDAV_QUEUE_DISK_MB", "1024")
 	t.Setenv("WEBDAV_TMPDIR", t.TempDir())
 	t.Setenv("WEBDAV_BUFFER_MB", "1")
 	probarInterbloqueo(t, 3*1024*1024, 2*1024*1024)

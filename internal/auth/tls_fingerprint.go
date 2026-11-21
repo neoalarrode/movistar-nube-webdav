@@ -14,8 +14,6 @@ import (
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 	"golang.org/x/sys/cpu"
-
-	"movistar-webdav-proxy/internal/config"
 )
 
 // clientHelloIDFromEnv resuelve la huella TLS (ClientHelloID) que debe imitar el
@@ -49,13 +47,6 @@ func clientHelloIDFromEnv() utls.ClientHelloID {
 	case "o2", "o2_windows", "openssl":
 		return HelloO2Windows
 	default:
-		if IsDesktopProfile() {
-			// Perfil desktop: el ClientHello del cliente oficial (OpenSSL 1.1.1, sin
-			// ALPN). Con la huella de Chrome y el User-Agent "omh windows client"
-			// CloudFront acaba devolviendo 401 vacíos; HelloGolang (UTLS_CLIENT_HELLO=golang)
-			// también pasa y queda como alternativa.
-			return HelloO2Windows
-		}
 		return utls.HelloChrome_Auto
 	}
 }
@@ -398,20 +389,6 @@ func NewFingerprintedTransport() http.RoundTripper {
 	}
 
 	ft := &fingerprintedTransport{h1: h1, h2: h2}
-	if IsDesktopProfile() {
-		ft.sapiH1 = newSAPIHTTP1Transport()
-		// El cliente oficial usa la misma huella (sin ALPN) también con el servidor de
-		// subidas: capturado el 18/11/2026, JA3 57fbe0ae… hacia upload.cloud.o2online.es.
-		// Solo donde se habla como la app (config.OfficialClient); con
-		// SAPI_OFFICIAL_CLIENT=false, el TLS estándar de Go de siempre.
-		std := &tls.Dialer{NetDialer: &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}}
-		h1.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-			if config.OfficialClient() {
-				return dialTLSContextHTTP1Only(ctx, network, addr)
-			}
-			return std.DialContext(ctx, network, addr)
-		}
-	}
 	return ft
 }
 
