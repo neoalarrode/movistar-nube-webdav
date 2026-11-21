@@ -1,12 +1,12 @@
 # Configuración de Clientes de Copia de Seguridad 💾🛡️
 
-Esta guía detalla la configuración óptima para realizar copias de seguridad automáticas hacia Movistar / O2 Cloud mediante el proxy WebDAV con **Synology HyperBackup**, **Duplicati** y **rclone**.
+Esta guía detalla la configuración óptima para realizar copias de seguridad automáticas hacia Movistar Cloud mediante el proxy WebDAV con **Synology HyperBackup**, **Duplicati** y **rclone**.
 
 ---
 
 ## 🗄️ 1. Synology HyperBackup
 
-HyperBackup de Synology NAS es 100% compatible con el proxy WebDAV de Movistar/O2 Cloud gracias a la implementación de las cuotas virtuales RFC 4331 y el soporte de repositorios `.hbk`.
+HyperBackup de Synology NAS es 100% compatible con el proxy WebDAV de Movistar Cloud gracias a la implementación de las cuotas virtuales RFC 4331 y el soporte de repositorios `.hbk`.
 
 ### Pasos de Configuración:
 
@@ -83,14 +83,11 @@ pass = TuContraseñaOfuscadaConRcloneObscure
 > [!NOTE]
 > Se recomienda limitar `--transfers 3` para alinearse con el semáforo interno del proxy y aprovechar el máximo ancho de banda sin saturar la API de Telefónica.
 
-> [!TIP]
-> **Archivos grandes y cortes de red (perfil `desktop`):** si la conexión con O2 se corta a mitad de una subida, el proxy la reanuda donde se quedó, como el cliente oficial. Pero O2 recibe las subidas reanudadas a solo 1–2 MB/s, y rclone da la subida por fallida si no recibe respuesta en 5 minutos (`--timeout`). En ese caso la reintenta entera, y el proxy retira lo que había subido a medias. Si subes archivos de varios GB con una conexión inestable, sube el límite, por ejemplo con `--timeout 30m`, para que la reanudación pueda terminar.
-
 ---
 
 ### 📦 Configuración avanzada: archivos de más de 4 GB (chunker) y cifrado (crypt)
 
-La API de Movistar / O2 Cloud rechaza cualquier archivo individual superior a **4 GB**. Para subir archivos de mayor tamaño hay que trocearlos con [`chunker`](https://rclone.org/chunker/), y opcionalmente cifrarlos con [`crypt`](https://rclone.org/crypt/). Esta configuración está probada con varios TB de datos:
+La API de Movistar Cloud rechaza cualquier archivo individual superior a **4 GB**. Para subir archivos de mayor tamaño hay que trocearlos con [`chunker`](https://rclone.org/chunker/), y opcionalmente cifrarlos con [`crypt`](https://rclone.org/crypt/). Esta configuración está probada con varios TB de datos:
 
 ```ini
 [movistar]
