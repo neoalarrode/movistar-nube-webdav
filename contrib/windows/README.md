@@ -41,3 +41,11 @@ Instala rclone y WinFsp con `winget`. Se puede volver a ejecutar para actualizar
   1. Borra `Nube.cmd` de la carpeta de inicio (`shell:startup`).
   2. Borra el acceso «Nube (subida directa)» de `shell:sendto`.
   3. Borra el remoto con `rclone config delete nube`.
+
+## Pruebas
+
+`pruebas/probar.sh` comprueba, sin Windows (con PowerShell 7 y rclone):
+- la sintaxis del instalador y de los scripts que genera;
+- «Enviar a» sin duplicados y con duplicados en sus tres modos, contra una carpeta local.
+
+Se ejecuta en la CI en cada cambio. Las partes que solo existen en Windows (winget, WinFsp, el montaje y las ventanas) hay que probarlas en un PC.

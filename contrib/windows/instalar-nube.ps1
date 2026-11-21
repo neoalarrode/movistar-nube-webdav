@@ -214,7 +214,7 @@ foreach ($d in $items | Where-Object { $_.PSIsContainer }) {
     if ($remotos.Count -eq 0) { continue }
     foreach ($arch in Get-ChildItem -LiteralPath $d.FullName -Recurse -File -Force) {
         if ($arch.Name -in @("Thumbs.db", "desktop.ini")) { continue }
-        $relArch = $arch.FullName.Substring($d.FullName.Length).TrimStart('\').Replace('\', '/')
+        $relArch = $arch.FullName.Substring($d.FullName.Length).Replace('\', '/').TrimStart('/')
         $r = $remotos[$relArch.ToLowerInvariant()]
         if ($r) { $conflictos.Add([pscustomobject]@{ Grupo = $d.FullName; Rel = $relArch; Local = $arch; Nube = $r }) }
     }
@@ -273,7 +273,7 @@ if ($conflictos.Count -gt 0) {
 }
 # Opciones de rclone según la decisión. En «uno», la copia principal omite todo lo
 # existente y luego se reenvían solo los marcados.
-$dup = switch ($modo) { "omitir" { @("--ignore-existing") } "uno" { @("--ignore-existing") } "reemplazar" { @("--ignore-times") } default { @() } }
+$dup = @(switch ($modo) { "omitir" { "--ignore-existing" } "uno" { "--ignore-existing" } "reemplazar" { "--ignore-times" } })  # siempre lista: un solo elemento se volvería texto y @dup lo partiría en letras
 function Reenviar-Marcados([string]$origen, [string]$destino) {
     if (-not $reemplazar.ContainsKey($origen)) { return }
     $l = New-TemporaryFile
