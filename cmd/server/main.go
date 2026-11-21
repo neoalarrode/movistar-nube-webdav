@@ -84,22 +84,6 @@ func main() {
 		// PDTE No debería iniciarse servicios para evitar bloqueos, aborar arranque os.Exit(1) ????  o bien luego aplicar SetRunning(false) para pararlo??
 	}
 
-	// mejoras logs, indicamos valores User-Agent, cuando no esté en modo web
-	if !config.WebSessionEnabled() {
-		logger.Log("[Auth] 🔧 Perfil de cliente SAPI: browser (HTTP/2, X-deviceid web-).")
-		if sapiUA, custom := auth.GetSAPIUserAgentInfo(); custom {
-			logger.Log("[Auth] 🔧 SAPI_USER_AGENT modificado: %s", sapiUA)
-		} else {
-			logger.Log("[Auth] 🔧 SAPI_USER_AGENT usando valor por defecto: %s", sapiUA)
-		}
-
-		if desktopUA, custom := auth.GetDesktopUserAgentInfo(); custom {
-			logger.Log("[Auth] 🔧 DESKTOP_USER_AGENT modificado: %s", desktopUA)
-		} else {
-			logger.Log("[Auth] 🔧 DESKTOP_USER_AGENT usando valor por defecto: %s", desktopUA)
-		}
-	}
-
 	// log Huella TLS (uTLS)
 	client, err := sapi.NewClient(cfg)
 	if err != nil {
