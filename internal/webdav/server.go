@@ -145,7 +145,7 @@ func NewServerWithAuth(client *sapi.Client, authCfg config.AuthConfig, metaStore
 		FileSystem: fs,
 		LockSystem: lockSys,
 		Logger: func(r *http.Request, err error) {
-			if err != nil && !errors.Is(err, ErrUploadTooLarge) && !errors.Is(err, ErrUploadUnsupported) && !isExpectedNotFound(r.Method, err) {
+			if err != nil && !errors.Is(err, ErrUploadTooLarge) && !isExpectedNotFound(r.Method, err) {
 				logger.Log("[WebDAV] ❌ Error en %s %s: %v", r.Method, r.URL.Path, err)
 				noteRequestError(r.Method, err, time.Now())
 			}
@@ -429,9 +429,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1b. Bloqueo del cortafuegos de O2 (waf_breaker.go): mientras dure la pausa, las
+	// 1b. Bloqueo del cortafuegos de la nube (waf_breaker.go): mientras dure la pausa, las
 	// escrituras que necesitan el servidor bloqueado se rechazan con 503 + Retry-After sin
-	// llamar a O2. Antes llegaban al cliente como 409/500 genéricos y rclone las reintentaba
+	// llamar a la nube. Antes llegaban al cliente como 409/500 genéricos y rclone las reintentaba
 	// una y otra vez, alargando el bloqueo. Las lecturas se sirven de la caché local.
 	if s.rejectWriteDuringWAFBlock(lw, method, urlPath) {
 		return
@@ -551,7 +551,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		lw.Header().Set("Content-Type", ct)
 
-		// Vigilar que el cuerpo llegue entero: si O2 responde 200/206 con la longitud
+		// Vigilar que el cuerpo llegue entero: si la nube responde 200/206 con la longitud
 		// anunciada pero no entrega ni un byte (p. ej. un archivo recién subido que aún
 		// no se sirve), convertir ese cuerpo vacío en un 5xx completo en vez de un
 		// 200/206 truncado que el cliente tomaría por bueno. Un cuerpo corto (truncado
@@ -592,7 +592,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // getBodyGuard envuelve el ResponseWriter de un GET/HEAD y retrasa el envío de la
 // cabecera hasta el primer byte del cuerpo. Así, si el handler anuncia 200/206 con
-// longitud > 0 pero acaba sin escribir ni un byte (O2 devuelve el contenido vacío de
+// longitud > 0 pero acaba sin escribir ni un byte (la nube devuelve el contenido vacío de
 // un archivo que aún no sirve), se sustituye por un 5xx completo en vez de entregar un
 // 200/206 truncado que el cliente tomaría por bueno. Un cuerpo corto (algún byte y
 // luego EOF) no se toca: ya se detecta como 'unexpected EOF'. HEAD y las respuestas de
@@ -699,21 +699,12 @@ type putStatusInterceptor struct {
 	guard        *uploadGuard
 	wroteHeader  bool
 	retryBody    bool // se respondió 503: el cuerpo es el motivo, no el texto del 405
-	ownBody      bool // se respondió 503 o 415: el cuerpo es el del proxy, no el del 405
+	ownBody      bool // se respondió 503: el cuerpo es el del proxy, no el del 405
 }
 
 func (p *putStatusInterceptor) WriteHeader(statusCode int) {
-	unsupportedMsg := ""
 	if ((p.exceededFlag != nil && p.exceededFlag.Load()) || (p.guard != nil && p.guard.tooLarge.Load())) && statusCode >= 400 {
 		statusCode = http.StatusRequestEntityTooLarge
-	} else if p.guard != nil && p.guard.unsupported.Load() && statusCode >= 400 {
-		// MED-1050: definitivo. Sin Retry-After; 415 no lo reintentan los clientes.
-		h := p.ResponseWriter.Header()
-		h.Del("Content-Length")
-		h.Set("Content-Type", "text/plain; charset=utf-8")
-		h.Set("X-Content-Type-Options", "nosniff")
-		statusCode = http.StatusUnsupportedMediaType
-		unsupportedMsg = "O2 Cloud no admite este archivo: su contenido no corresponde a la extensión (MED-1050). Reintentarlo no lo arreglará.\n"
 	} else if p.guard != nil && p.guard.streamFailed.Load() && statusCode >= 400 {
 		// Subida en flujo sin copia local fallida: 503 para que el cliente (rclone)
 		// la trate como transitoria y la repita, en vez del 405 genérico.
@@ -729,13 +720,10 @@ func (p *putStatusInterceptor) WriteHeader(statusCode int) {
 		p.retryBody = true
 	}
 	p.wroteHeader = true
-	p.ownBody = p.retryBody || unsupportedMsg != ""
+	p.ownBody = p.retryBody
 	p.ResponseWriter.WriteHeader(statusCode)
-	if unsupportedMsg != "" {
-		_, _ = p.ResponseWriter.Write([]byte(unsupportedMsg))
-	}
 	if p.retryBody {
-		msg := "O2 Cloud no aceptó la subida; reinténtalo en 30 s"
+		msg := "Movistar Cloud no aceptó la subida; reinténtalo en 30 s"
 		if r, ok := p.guard.reason.Load().(string); ok && r != "" {
 			msg += ": " + r
 		}
@@ -1008,7 +996,7 @@ func isExpectedNotFound(method string, err error) bool {
 }
 
 // rejectWriteDuringWAFBlock responde 503 + Retry-After a las escrituras que necesitan un
-// servidor de O2 que está en pausa por un bloqueo del WAF. Devuelve true si ha respondido.
+// servidor de la nube que está en pausa por un bloqueo del WAF. Devuelve true si ha respondido.
 //   - PUT: solo necesita el servidor de subidas (la consulta "¿existe ya?" a la API se
 //     salta sola si la API está en pausa). Se rechaza solo si están en pausa las subidas.
 //   - MKCOL: si la carpeta ya existe se resuelve en local (rclone hace un MKCOL antes de
@@ -1042,6 +1030,6 @@ func (s *Server) rejectWriteDuringWAFBlock(w http.ResponseWriter, method, urlPat
 		secs = 1
 	}
 	w.Header().Set("Retry-After", strconv.Itoa(secs))
-	http.Error(w, fmt.Sprintf("O2 Cloud firewall (WAF) block: %s paused until %s", strings.ToLower(method), until.Local().Format("15:04")), http.StatusServiceUnavailable)
+	http.Error(w, fmt.Sprintf("Movistar Cloud firewall (WAF) block: %s paused until %s", strings.ToLower(method), until.Local().Format("15:04")), http.StatusServiceUnavailable)
 	return true
 }

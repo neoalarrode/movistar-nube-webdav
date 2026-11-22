@@ -33,7 +33,7 @@ func TestBootstrapEmptyFilesIfPending(t *testing.T) {
 	}))
 	defer mockSAPI.Close()
 
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

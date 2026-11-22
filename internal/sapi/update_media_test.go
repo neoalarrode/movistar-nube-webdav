@@ -12,7 +12,7 @@ import (
 	"movistar-webdav-proxy/internal/config"
 )
 
-// Clasificación comprobada con O2 Cloud (ver mediaKindForName).
+// Clasificación comprobada con Movistar Cloud (ver mediaKindForName).
 func TestMediaKindForName(t *testing.T) {
 	cases := map[string]string{
 		"01 Canción.m4a": "audio", "pista.MP3": "audio", "toma.wav": "audio",
@@ -56,7 +56,7 @@ func fakeSaveMetadataCode(t *testing.T, code string) (*Client, func() []string) 
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": map[string]interface{}{"code": code, "message": "The file extension or the format is not supported."}})
 	}))
 	t.Cleanup(srv.Close)
-	c, err := NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -101,7 +101,7 @@ func fakeSaveMetadata(t *testing.T, validating int, okKinds ...string) (*Client,
 	mediaMoveRetryDelay = time.Millisecond
 	t.Cleanup(func() { mediaMoveRetryDelay = old })
 
-	c, err := NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	c, err := NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestUpdateMedia_KindFromCurrentName(t *testing.T) {
 	assertCalls(t, calls(), "audio")
 }
 
-// FLAC y MKV son genéricos para O2: una sola llamada.
+// FLAC y MKV son genéricos para la nube: una sola llamada.
 func TestUpdateMedia_GenericFileOnlyOneCall(t *testing.T) {
 	c, calls := fakeSaveMetadata(t, 0, "file")
 	if err := c.UpdateMedia("1", "pista.flac", "pista.flac", 200); err != nil {

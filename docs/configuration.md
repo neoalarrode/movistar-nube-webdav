@@ -73,7 +73,7 @@ Esta guía reúne toda la referencia técnica del proxy: variables de entorno co
 | :--- | :--- | :--- |
 | `SAPI_USER_AGENT` | `Mozilla/5.0 ... Chrome/133.0.0.0 ...` | Fuerza el `User-Agent` enviado a SAPI (coherente con la huella TLS de Chrome). |
 | `UTLS_CLIENT_HELLO` | `chrome_auto` | Huella TLS (`ClientHello`) hacia SAPI. Otros valores para pruebas: `golang`, `firefox_auto`, `safari_auto`, `ios`, `android`, `edge`, `chrome_120`, `randomized`. |
-| `WEB_SESSION` | `true` | [Modo Web](web-mode.md), el único del proxy (`false` solo en pruebas). Sus variables específicas (`WEB_SESSION_RENEW_BEFORE`, `WEB_TRASH_EMPTY_EVERY`, `CHROME_PATH`, `CHROME_NO_SANDBOX`) se detallan en esa guía. |
+| Sesión web | — | Siempre activa ([Modo Web](web-mode.md)). Sus variables (`WEB_SESSION_RENEW_BEFORE`, `WEB_TRASH_EMPTY_EVERY`, `CHROME_PATH`, `CHROME_NO_SANDBOX`) se detallan en esa guía. |
 
 ---
 

@@ -1,7 +1,7 @@
 # Descargo de Responsabilidad (Disclaimer)
 
 ## 1. Proyecto Independiente y No Oficial
-Este software (**Movistar / O2 Cloud WebDAV Proxy**) es un desarrollo de código abierto completamente independiente y comunitario. **No está afiliado, asociado, patrocinado, respaldado ni aprobado oficialmente por Telefónica, S.A., Telefónica de España, S.A.U., O2, Synchronoss Technologies, Inc., ni por ninguna de sus filiales o entidades subsidiarias.**
+Este software (**Movistar Nube WebDAV**) es un desarrollo de código abierto completamente independiente y comunitario. **No está afiliado, asociado, patrocinado, respaldado ni aprobado oficialmente por Telefónica, S.A., Telefónica de España, S.A.U., O2, Synchronoss Technologies, Inc., ni por ninguna de sus filiales o entidades subsidiarias.**
 
 ## 2. Finalidad y Marco Legal de Interoperabilidad
 El propósito exclusivo de este proyecto es técnico, formativo y de **interoperabilidad de sistemas**, permitiendo a usuarios legítimos conectar sus herramientas de almacenamiento y copia de seguridad (como Duplicati, Synology HyperBackup, restic o montajes estándar WebDAV RFC 4918) con el servicio contratado en su suscripción:

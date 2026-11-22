@@ -6,18 +6,18 @@ import (
 	"movistar-webdav-proxy/internal/config"
 )
 
-// Nombres de archivo que O2 no admite tal cual (comprobado el 19 y 20/11/2026):
+// Nombres de archivo que la nube no admite tal cual (comprobado el 19 y 20/11/2026):
 //
 //   - los que empiezan por punto (.env, .gitignore, .DS_Store): COM-1011 «Missing
 //     required parameter» al registrarlos;
 //   - los que terminan en .tmp, sin distinguir mayúsculas: MED-1000;
-//   - los que terminan en punto: O2 los guarda sin él («x.» queda «x»).
+//   - los que terminan en punto: la nube los guarda sin él («x.» queda «x»).
 //
 // Para poder guardarlos, el proxy escribe ese punto como «%2E» en la nube y lo
-// recupera al leer: «.env» ↔ «%2Eenv», «x.» ↔ «x%2E», «x.tmp» ↔ «x%2Etmp». O2 admite
+// recupera al leer: «.env» ↔ «%2Eenv», «x.» ↔ «x%2E», «x.tmp» ↔ «x%2Etmp». La nube admite
 // esos nombres (comprobado el 20/11/2026). Solo se cambia ese punto concreto; el resto
-// del nombre queda igual, así que en la web de O2 se reconoce el archivo. Las carpetas
-// no lo necesitan: O2 admite «.git», «carpeta.» y «c.tmp».
+// del nombre queda igual, así que en la web de la nube se reconoce el archivo. Las carpetas
+// no lo necesitan: la nube admite «.git», «carpeta.» y «c.tmp».
 //
 // Un archivo que ya estuviera en la nube con «%2E» en esas posiciones se mostraría con
 // el punto. Con SAPI_ESCAPE_NAMES=false no se traduce nada.

@@ -290,9 +290,9 @@ type Client struct {
 	lastReqTime    time.Time
 	pacingInterval time.Duration
 
-	refreshFn func() bool // solo para pruebas: sustituye a RefreshSession (que llama a O2 de verdad)
+	refreshFn func() bool // solo para pruebas: sustituye a RefreshSession (que llama a la nube de verdad)
 
-	waf       wafBreaker // pausa las llamadas a la API de O2 tras un 403 del cortafuegos (waf_breaker.go)
+	waf       wafBreaker // pausa las llamadas a la API de la nube tras un 403 del cortafuegos (waf_breaker.go)
 	wafUpload wafBreaker // pausa las subidas (servidor de subidas) tras un 403 del cortafuegos en ese servidor
 
 	validationFirst time.Duration // primera consulta de validación tras subir (WithValidationPolling)
@@ -301,11 +301,6 @@ type Client struct {
 
 // ErrFileTooLarge se devuelve cuando SAPI rechaza un archivo por superar el tamaño máximo permitido (MED-1020).
 var ErrFileTooLarge = errors.New("SAPI MED-1020: file size exceeds configured max file size limit")
-
-// ErrMediaUnsupported (MED-1050): O2 no admite el archivo con el tipo que indica su
-// extensión (p. ej. un .jpg cuyo contenido no es una imagen). Es definitivo: la app
-// oficial lo deja sin subir y no lo reintenta.
-var ErrMediaUnsupported = errors.New("SAPI MED-1050: the file extension or the format is not supported")
 
 // ErrSessionRefreshTransient indica que la renovación de sesión falló por un
 // problema transitorio (red/5xx), no porque el refresh_token esté revocado.
@@ -343,8 +338,8 @@ func NewClient(cfg config.AccountConfig, opts ...Option) (*Client, error) {
 		Timeout:   0,
 	}
 
-	baseURL := auth.GetSAPIBaseURL(cfg.Provider)
-	uploadURL := auth.GetUploadBaseURL(cfg.Provider)
+	baseURL := auth.GetSAPIBaseURL()
+	uploadURL := auth.GetUploadBaseURL()
 
 	maxConcurrent := 1
 	if envMax := strings.TrimSpace(os.Getenv("SAPI_MAX_CONCURRENT")); envMax != "" {
@@ -425,9 +420,6 @@ func (c *Client) syncCookiesLocked() {
 		return
 	}
 	cookieDomain := "micloud.movistar.es"
-	if strings.EqualFold(c.cfg.Provider, "o2") {
-		cookieDomain = "cloud.o2online.es"
-	}
 	sapiURL, err := url.Parse("https://" + cookieDomain)
 	if err != nil {
 		return
@@ -467,8 +459,8 @@ func (c *Client) SetConfig(cfg config.AccountConfig) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg = cfg
-	c.baseURL = auth.GetSAPIBaseURL(cfg.Provider)
-	c.uploadURL = auth.GetUploadBaseURL(cfg.Provider)
+	c.baseURL = auth.GetSAPIBaseURL()
+	c.uploadURL = auth.GetUploadBaseURL()
 	c.rootFolderID = 0
 	c.sessionExpired = false
 	c.syncCookiesLocked()
@@ -635,11 +627,11 @@ func isLoopbackURL(raw string) bool {
 }
 
 func (c *Client) RefreshSession() bool {
-	ok, _ := c.refreshSessionInternal(false)
+	ok, _ := c.refreshSessionInternal()
 	return ok
 }
 
-func (c *Client) refreshSessionInternal(forceOAuth bool) (bool, bool) {
+func (c *Client) refreshSessionInternal() (bool, bool) {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
 
@@ -702,15 +694,15 @@ func (c *Client) releaseSlot() {
 }
 
 func (c *Client) refreshSession() bool {
-	ok, _ := c.refreshSessionWithMode(false)
+	ok, _ := c.refreshSessionWithMode()
 	return ok
 }
 
-func (c *Client) refreshSessionWithMode(forceOAuth bool) (bool, bool) {
+func (c *Client) refreshSessionWithMode() (bool, bool) {
 	if c.refreshFn != nil {
 		return c.refreshFn(), true
 	}
-	return c.refreshSessionInternal(forceOAuth)
+	return c.refreshSessionInternal()
 }
 
 func (c *Client) DoRequest(req *http.Request) (*http.Response, error) {
@@ -817,12 +809,12 @@ func (c *Client) doRequestLocked(req *http.Request) (*http.Response, error) {
 		if c.HasCredentials() && !c.IsSessionExpired() {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
-			if ok, usedStep2 := c.refreshSessionWithMode(false); ok {
+			if ok, usedStep2 := c.refreshSessionWithMode(); ok {
 				resp2, err2 := c.retryRequestWithCurrentConfig(req)
 				if err2 == nil && resp2.StatusCode == http.StatusUnauthorized && !usedStep2 {
 					_, _ = io.Copy(io.Discard, io.LimitReader(resp2.Body, 4096))
 					_ = resp2.Body.Close()
-					if ok2, _ := c.refreshSessionWithMode(true); ok2 {
+					if ok2, _ := c.refreshSessionWithMode(); ok2 {
 						resp2, err2 = c.retryRequestWithCurrentConfig(req)
 					} else {
 						resp2 = nil
@@ -1435,7 +1427,7 @@ func (c *Client) CreateFolder(name string, parentID int64) (*FolderItem, error) 
 	}
 
 	if createdID == 0 {
-		return nil, fmt.Errorf("create folder: O2/Movistar Cloud no devolvió ID para la carpeta '%s' (respuesta: %.300s)", name, string(respBody))
+		return nil, fmt.Errorf("create folder: Movistar Cloud no devolvió ID para la carpeta '%s' (respuesta: %.300s)", name, string(respBody))
 	}
 
 	nowRFC := time.Now().UTC().Format("20060102T150405Z")
@@ -1601,14 +1593,14 @@ func (c *Client) deleteFolderLegacy(folderID int64, permanent bool) error {
 // mediaKindForName devuelve el tipo de media con el que SAPI clasifica un archivo
 // según su extensión: "audio", "video", "picture" o "file" (genérico).
 //
-// Comprobado con O2 Cloud subiendo y moviendo archivos reales de cada formato:
+// Comprobado con Movistar Cloud subiendo y moviendo archivos reales de cada formato:
 //   - audio:   mp3, m4a (AAC y ALAC), wav
 //   - vídeo:   mp4
 //   - imagen:  jpg, jpeg, png, gif, webp, bmp, tif, tiff y heic (la app oficial de
 //     Windows sube el HEIC con upload/picture; capturado el 18/11/2026)
 //   - genérico (la app no los trata como multimedia): aac, ogg, opus, wma, aiff, flac,
 //     mkv, mov, m4v, 3gp, avi, webm, wmv, mpg, ts, flv, avif, svg y cualquier otro.
-//   - heif también es genérico: O2 rechaza un .heif como imagen al registrarlo, por la
+//   - heif también es genérico: la nube rechaza un .heif como imagen al registrarlo, por la
 //     extensión, aunque sea una foto real (MED-1050 en save-metadata), y como genérico
 //     lo guarda intacto (comprobado el 20/11/2026).
 //
@@ -1715,7 +1707,7 @@ func (c *Client) mediaValidationStatus(mediaID string, folderID int64) (string, 
 	return "", fmt.Errorf("%w: %s", errValidationNoData, mediaID)
 }
 
-// errValidationNoData: O2 no devuelve el estado de ese ID (ya no existe: borrado o
+// errValidationNoData: la nube no devuelve el estado de ese ID (ya no existe: borrado o
 // sustituido).
 var errValidationNoData = errors.New("validation status: sin datos")
 
@@ -2160,7 +2152,7 @@ func (c *Client) UploadFileToFolder(fileName string, reader io.Reader, size int6
 		if resp.StatusCode == http.StatusUnauthorized {
 			if attempt < maxRetries && canRetry && c.HasCredentials() {
 				if attempt > 0 && !c.IsSessionExpired() {
-					c.refreshSessionWithMode(true)
+					c.refreshSessionWithMode()
 				}
 				if !c.IsSessionExpired() {
 					c.httpClient.CloseIdleConnections()

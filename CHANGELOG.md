@@ -25,6 +25,13 @@ Hasta la entrada «Sin publicar» incluida, el registro es el heredado del proye
 - **Sin cambios:** se mantiene lo de Hyper Backup, Duplicati y NTLM (compatibilidad de clientes WebDAV, independiente del modo).
 - **Documentación** reescrita solo para el modo web.
 
+### 🧹 Fuera O2 y los restos del modo nativo
+- **Solo Movistar Cloud:** fuera O2 (direcciones `cloud.o2online.es`, el campo `provider`, el dominio de las cookies y los textos «Movistar/O2»).
+- **Fuera `SAPI_UNSUPPORTED_AS_FILE`** y la respuesta 415 por `MED-1050`: era un caso de O2 que la web no produce.
+- **Fuera `WEB_SESSION`:** la sesión web ya no se puede desactivar; el proxy siempre arranca el Chromium.
+- **Fuera el transporte HTTP/1.1 del perfil de escritorio** en la huella TLS.
+- Comentarios y avisos de Telegram sin O2 ni línea de teléfono.
+
 ### 🖥️ Panel
 - Fuera la tarjeta de la copia de un script externo (`COPY_STATUS_DIR`): la actividad sale del proxy y del informe de copias de los clientes (#2).
 

@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// Las subidas grandes necesitan esperar la respuesta de O2 más de 60 s (15/11/2026).
+// Las subidas grandes necesitan esperar la respuesta de la nube más de 60 s (15/11/2026).
 func TestUploadResponseTimeout_PorDefectoYConfigurable(t *testing.T) {
 	t.Setenv("UPLOAD_RESPONSE_TIMEOUT_SEC", "")
 	if got := UploadResponseTimeout(); got != 5*time.Minute {

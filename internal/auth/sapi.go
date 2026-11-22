@@ -10,21 +10,15 @@ import (
 const SAPIUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 
 // GetSAPIBaseURL es la URL base de la API (SAPI_BASE_URL la sustituye, p. ej. en pruebas).
-func GetSAPIBaseURL(provider string) string {
+func GetSAPIBaseURL() string {
 	if env := strings.TrimSpace(os.Getenv("SAPI_BASE_URL")); env != "" {
 		return env
-	}
-	if strings.EqualFold(provider, "o2") {
-		return "https://cloud.o2online.es/sapi"
 	}
 	return "https://micloud.movistar.es/sapi"
 }
 
 // GetUploadBaseURL es la URL base del servidor de subidas.
-func GetUploadBaseURL(provider string) string {
-	if strings.EqualFold(provider, "o2") {
-		return "https://upload.cloud.o2online.es"
-	}
+func GetUploadBaseURL() string {
 	return "https://upload.micloud.movistar.es"
 }
 

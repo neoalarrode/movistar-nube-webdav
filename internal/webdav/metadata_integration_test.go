@@ -47,7 +47,7 @@ func TestDuplicatiTestPath_RestrictedScope(t *testing.T) {
 }
 
 func TestMovistarFS_MetadataStore_ResolutionWithoutSAPI(t *testing.T) {
-	// Modo opcional que no distingue mayúsculas (por defecto los nombres son exactos, como en O2).
+	// Modo opcional que no distingue mayúsculas (por defecto los nombres son exactos, como en la nube).
 	t.Setenv("WEBDAV_CASE_INSENSITIVE", "true")
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "meta_test.db")
@@ -136,7 +136,7 @@ func TestMovistarFS_MetadataStore_ResolutionWithoutSAPI(t *testing.T) {
 }
 
 func TestMovistarFS_TombstonesAndUploadCache_CaseInsensitive(t *testing.T) {
-	// Modo opcional que no distingue mayúsculas (por defecto los nombres son exactos, como en O2).
+	// Modo opcional que no distingue mayúsculas (por defecto los nombres son exactos, como en la nube).
 	t.Setenv("WEBDAV_CASE_INSENSITIVE", "true")
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "meta_tomb_test.db")

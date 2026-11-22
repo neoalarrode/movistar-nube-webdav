@@ -15,10 +15,10 @@ import (
 	"movistar-webdav-proxy/internal/sapi"
 )
 
-// fakeO2 simula el comportamiento observado en O2 Cloud: la respuesta de subida no
+// fakeNube simula el comportamiento observado en Movistar Cloud: la respuesta de subida no
 // incluye "url", la URL por defecto (/media/content?id=) no sirve el archivo, y la
 // consulta del archivo por ID devuelve la URL de descarga real.
-type fakeO2 struct {
+type fakeNube struct {
 	mu        sync.Mutex
 	stored    []byte
 	indexed   bool // si la consulta por ID ya conoce el archivo
@@ -26,7 +26,7 @@ type fakeO2 struct {
 	queries   int  // número de consultas por ID recibidas
 }
 
-func (f *fakeO2) handler(t *testing.T) http.Handler {
+func (f *fakeNube) handler(t *testing.T) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		action := r.URL.Query().Get("action")
 		switch {
@@ -88,27 +88,25 @@ func (f *fakeO2) handler(t *testing.T) http.Handler {
 	})
 }
 
-func (f *fakeO2) set(indexed, failQuery bool) {
+func (f *fakeNube) set(indexed, failQuery bool) {
 	f.mu.Lock()
 	f.indexed, f.failQuery = indexed, failQuery
 	f.mu.Unlock()
 }
 
-func (f *fakeO2) queryCount() int {
+func (f *fakeNube) queryCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.queries
 }
 
 // uploadThenServer sube 300 KB (más del límite de 256 KB que se sirve desde memoria).
-func uploadThenServer(t *testing.T, f *fakeO2) (*Server, []byte) {
+func uploadThenServer(t *testing.T, f *fakeNube) (*Server, []byte) {
 	t.Helper()
 	mock := newShimServer(f.handler(t))
 	t.Cleanup(mock.Close)
 
-	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "movistar", ValidationKey: "vk",
-	})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
@@ -134,9 +132,9 @@ func readBack(srv *Server) []byte {
 // Caso normal: SAPI ya conoce el archivo -> lectura inmediata correcta y la URL se
 // recuerda (una sola consulta aunque se lea varias veces).
 func TestFreshRead_FoundIsUsedAndRemembered(t *testing.T) {
-	// cuenta las llamadas a O2 aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
+	// cuenta las llamadas a la nube aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
 	t.Setenv("SAPI_REFRESH_AFTER_UPLOAD", "false")
-	f := &fakeO2{}
+	f := &fakeNube{}
 	f.set(true, false)
 	srv, payload := uploadThenServer(t, f)
 
@@ -161,7 +159,7 @@ func TestFreshRead_NotYetIndexedRetriesOnNextRead(t *testing.T) {
 		reuploadSourcePoll = oldPoll
 	}()
 
-	f := &fakeO2{}
+	f := &fakeNube{}
 	f.set(false, false)
 	srv, payload := uploadThenServer(t, f)
 
@@ -187,7 +185,7 @@ func TestFreshRead_NotYetIndexedRetriesOnNextRead(t *testing.T) {
 // Issue #41: PUT seguido inmediatamente de GET mientras SAPI termina de indexar en modo normal
 // debe esperar el sondeo de waitForDownloadURL y devolver el contenido en la primera lectura.
 func TestIssue41_ImmediateGetAfterPutWhileSapiIndexingInNormalMode(t *testing.T) {
-	// cuenta las llamadas a O2 aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
+	// cuenta las llamadas a la nube aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
 	t.Setenv("SAPI_REFRESH_AFTER_UPLOAD", "false")
 	oldWait, oldPoll := reuploadSourceWait, reuploadSourcePoll
 	reuploadSourceWait = 2 * time.Second
@@ -197,7 +195,7 @@ func TestIssue41_ImmediateGetAfterPutWhileSapiIndexingInNormalMode(t *testing.T)
 		reuploadSourcePoll = oldPoll
 	}()
 
-	f := &fakeO2{}
+	f := &fakeNube{}
 	f.set(false, false)
 	srv, payload := uploadThenServer(t, f)
 
@@ -218,13 +216,13 @@ func TestIssue41_ImmediateGetAfterPutWhileSapiIndexingInNormalMode(t *testing.T)
 // ese archivo hasta pasado urlLookupErrorBackoff (downloadRange sí intenta 1 refresco si el
 // cuerpo llega vacío).
 func TestFreshRead_ErrorBacksOffBeforeRetrying(t *testing.T) {
-	// cuenta las llamadas a O2 aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
+	// cuenta las llamadas a la nube aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
 	t.Setenv("SAPI_REFRESH_AFTER_UPLOAD", "false")
 	old := urlLookupErrorBackoff
 	urlLookupErrorBackoff = 800 * time.Millisecond
 	defer func() { urlLookupErrorBackoff = old }()
 
-	f := &fakeO2{}
+	f := &fakeNube{}
 	f.set(true, true) // la consulta por ID falla
 	srv, payload := uploadThenServer(t, f)
 

@@ -119,7 +119,6 @@ func setupTestWebDAVServer(t *testing.T, authCfg config.AuthConfig) (*Server, fu
 	t.Helper()
 	mockSAPI := newMockSAPIServer(t)
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -650,7 +649,6 @@ func TestWebDAV_SmallFileDownloadCachedInMemory(t *testing.T) {
 	defer mockSAPI.Close()
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

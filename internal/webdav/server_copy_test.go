@@ -60,7 +60,7 @@ func copyCloud(t *testing.T, copyReply string) (*Server, *[]string) {
 			b, _ := io.ReadAll(r.Body)
 			copies = append(copies, string(b))
 			if strings.HasPrefix(copyReply, "__cut") {
-				// O2 no responde a tiempo (la conexión se corta); con __cut_done__ la
+				// La nube no responde a tiempo (la conexión se corta); con __cut_done__ la
 				// copia se completa igualmente en el servidor.
 				copied = copyReply == "__cut_done__"
 				if hj, ok := w.(http.Hijacker); ok {
@@ -79,7 +79,7 @@ func copyCloud(t *testing.T, copyReply string) (*Server, *[]string) {
 		}
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar"})
+	client, err := sapi.NewClient(config.AccountConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func fastCopyWait(t *testing.T) {
 	t.Setenv("WEBDAV_COPY_WAIT_MAX_SEC", "0.2")
 }
 
-// La copia de 3 GB tardó más que el tiempo de espera y O2 la terminó igualmente:
+// La copia de 3 GB tardó más que el tiempo de espera y la nube la terminó igualmente:
 // el proxy no debe bajar y subir el archivo (dejaría dos con el mismo nombre), sino
 // esperar a que la copia aparezca en el destino.
 func TestCopy_NoResponseButCopiedInCloud_NoDuplicate(t *testing.T) {

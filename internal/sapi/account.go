@@ -90,7 +90,7 @@ func apiError(b []byte) (code, message string, ok bool) {
 }
 
 // ErrCopyOutcomeUnknown: la petición de copia no obtuvo respuesta, así que no se sabe
-// si O2 la hizo (las de archivos grandes tardan más que el tiempo de espera).
+// si la nube la hizo (las de archivos grandes tardan más que el tiempo de espera).
 var ErrCopyOutcomeUnknown = errors.New("resultado de la copia en la nube desconocido")
 
 // CopyFile copia un archivo dentro de la nube, como la web (POST /media/file?action=copy
@@ -116,7 +116,7 @@ func (c *Client) CopyFile(mediaID string, parentID int64, name string) (string, 
 		if errors.Is(err, ErrWAFBlocked) {
 			return "", err
 		}
-		// Sin respuesta (p. ej. O2 tarda más de 60 s en copiar 3 GB): la copia puede
+		// Sin respuesta (p. ej. la nube tarda más de 60 s en copiar 3 GB): la copia puede
 		// terminar igualmente en el servidor. Copiar a mano daría un duplicado.
 		return "", fmt.Errorf("%w: %v", ErrCopyOutcomeUnknown, err)
 	}

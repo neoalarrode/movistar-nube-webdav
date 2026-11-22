@@ -18,11 +18,11 @@ import (
 	"movistar-webdav-proxy/internal/sapi"
 )
 
-// reuploadO2 simula lo observado en O2 Cloud al renombrar con cambio de extensión:
+// reuploadO2 simula lo observado en Movistar Cloud al renombrar con cambio de extensión:
 //   - la respuesta de subida no incluye "url" y la URL por defecto (/media/content?id=)
 //     responde con un error JSON (COM-1005) en vez del archivo;
 //   - la consulta por ID no conoce un archivo recién subido hasta pasadas unas
-//     consultas (en O2 Cloud, unos segundos) y después devuelve la URL real;
+//     consultas (en Movistar Cloud, unos segundos) y después devuelve la URL real;
 //   - el listado de la carpeta tarda en incluir los archivos recién subidos.
 type reuploadO2 struct {
 	mu               sync.Mutex
@@ -193,9 +193,7 @@ func newReuploadServer(t *testing.T, f *reuploadO2) *Server {
 	t.Helper()
 	mock := newShimServer(f.handler(t))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "movistar", ValidationKey: "vk",
-	})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatalf("NewClient failed: %v", err)
 	}
@@ -314,7 +312,7 @@ func TestRename_ExtensionChange_ShortDownloadKeepsOriginal(t *testing.T) {
 	payload := randomBytes(1024 * 1024)
 	oldID := f.seed("c.part", payload) // archivo asentado -> va por la ruta de descarga
 	f.mu.Lock()
-	f.truncateDownload = len(payload) / 2 // O2 entrega solo la mitad
+	f.truncateDownload = len(payload) / 2 // La nube entrega solo la mitad
 	f.mu.Unlock()
 
 	rec := do(srv, "MOVE", "/c.part", nil, map[string]string{"Destination": "/c.zip.aes", "Overwrite": "T"})

@@ -60,7 +60,7 @@ func TestSendTestWithKeepsActiveCredentials(t *testing.T) {
 	f := &fakeTelegram{}
 	f.start(t)
 	Default.UpdateCredentials("111:activo", "1")
-	if err := SendTestWith("222:prueba", "2", "movistar"); err != nil {
+	if err := SendTestWith("222:prueba", "2"); err != nil {
 		t.Fatal(err)
 	}
 	if tok, chat := Default.Credentials(); tok != "111:activo" || chat != "1" {

@@ -61,7 +61,7 @@ func get(t *testing.T, c *Client) (*http.Response, error) {
 	return resp, err
 }
 
-// Tras el primer 403 de CloudFront no se envía ninguna petición más a O2 hasta que pasa
+// Tras el primer 403 de CloudFront no se envía ninguna petición más a la nube hasta que pasa
 // la pausa; la siguiente hace de sonda y, si va bien, todo vuelve a la normalidad.
 func TestWAFBreaker_PausaTrasElPrimer403YSondaAlAcabar(t *testing.T) {
 	var modo atomic.Value
@@ -73,7 +73,7 @@ func TestWAFBreaker_PausaTrasElPrimer403YSondaAlAcabar(t *testing.T) {
 
 	resp, err := get(t, c)
 	if err != nil || resp == nil || resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("la primera petición debe llegar a O2 y devolver su 403: resp=%v err=%v", resp, err)
+		t.Fatalf("la primera petición debe llegar a la nube y devolver su 403: resp=%v err=%v", resp, err)
 	}
 	if body, _ := io.ReadAll(resp.Body); !strings.Contains(string(body), "could not be satisfied") {
 		t.Errorf("el cuerpo del 403 debe seguir legible para el llamante, leído: %q", body)
@@ -88,10 +88,10 @@ func TestWAFBreaker_PausaTrasElPrimer403YSondaAlAcabar(t *testing.T) {
 		}
 	}
 	if n := atomic.LoadInt32(&hits); n != 1 {
-		t.Fatalf("durante la pausa no debe salir ninguna petición a O2; salieron %d en total", n)
+		t.Fatalf("durante la pausa no debe salir ninguna petición a la nube; salieron %d en total", n)
 	}
 
-	// Pasada la pausa, O2 ya responde: la sonda pasa y se vuelve a la normalidad.
+	// Pasada la pausa, la nube ya responde: la sonda pasa y se vuelve a la normalidad.
 	modo.Store("ok")
 	now = now.Add(wafCooldownBase + time.Second)
 	if resp, err := get(t, c); err != nil || resp.StatusCode != http.StatusOK {
@@ -102,7 +102,7 @@ func TestWAFBreaker_PausaTrasElPrimer403YSondaAlAcabar(t *testing.T) {
 	}
 }
 
-// Si al acabar la pausa O2 sigue bloqueando, la siguiente pausa es el doble (con tope).
+// Si al acabar la pausa la nube sigue bloqueando, la siguiente pausa es el doble (con tope).
 func TestWAFBreaker_PausaCreceSiSigueBloqueado(t *testing.T) {
 	var modo atomic.Value
 	var hits int32
@@ -142,7 +142,7 @@ func TestWAFBreaker_403DeSAPINoEsElCortafuegos(t *testing.T) {
 		t.Error("un 403 JSON de SAPI no debe activar la pausa del WAF")
 	}
 	if n := atomic.LoadInt32(&hits); n != 3 {
-		t.Errorf("esperadas 3 peticiones a O2, hubo %d", n)
+		t.Errorf("esperadas 3 peticiones a la nube, hubo %d", n)
 	}
 }
 

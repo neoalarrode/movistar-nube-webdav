@@ -28,7 +28,7 @@ func TestClaude_SincronizacionInicialCortada(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.Contains(r.URL.Path, "/profile/changes") && r.URL.Query().Get("from") != "0":
-			// Como O2 de verdad: pidiendo «cambios desde ahora» no hay nada nuevo
+			// Como la nube de verdad: pidiendo «cambios desde ahora» no hay nada nuevo
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"requesttime": int64(1794389793000), "responsetime": int64(1794389795000), "data": map[string]interface{}{}})
 		case strings.Contains(r.URL.Path, "/profile/changes"):
@@ -52,7 +52,7 @@ func TestClaude_SincronizacionInicialCortada(t *testing.T) {
 				} `json:"data"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			// Simula el bloqueo de O2 (CloudFront) a partir del elemento 1000
+			// Simula el bloqueo de la nube (CloudFront) a partir del elemento 1000
 			if fallar.Load() && len(body.Data.IDs) > 0 && body.Data.IDs[0] >= 2000 {
 				w.Header().Set("Content-Type", "text/html")
 				w.WriteHeader(http.StatusForbidden)
@@ -70,18 +70,18 @@ func TestClaude_SincronizacionInicialCortada(t *testing.T) {
 	})
 	srv := httptest.NewServer(h)
 	defer srv.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "o2", ValidationKey: "v"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "v"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	client.SetBaseURLs(srv.URL+"/sapi", srv.URL)
 
-	// 1) Primera sincronización: O2 bloquea a mitad
+	// 1) Primera sincronización: la nube bloquea a mitad
 	_, err1 := store.SyncChanges(client, false)
 	m1, _ := store.ListMediaInFolder(20)
 	t.Logf("1.ª pasada: error=%v | ficheros guardados=%d de %d | HasInitialSync=%v", err1 != nil, len(m1), total, store.HasInitialSync())
 
-	// 2) O2 vuelve a responder; el programa reintenta como hace cada minuto
+	// 2) La nube vuelve a responder; el programa reintenta como hace cada minuto
 	fallar.Store(false)
 	_, err2 := store.SyncChanges(client, false)
 	m2, _ := store.ListMediaInFolder(20)

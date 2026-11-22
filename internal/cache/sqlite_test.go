@@ -111,7 +111,7 @@ func TestSyncState(t *testing.T) {
 }
 
 func TestFolderCRUD_AndCaseInsensitivity(t *testing.T) {
-	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como O2).
+	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como la nube).
 	store, _ := createTempStore(t)
 	store.SetNameFolding(func() bool { return true })
 
@@ -204,7 +204,7 @@ func TestFolderCRUD_AndCaseInsensitivity(t *testing.T) {
 }
 
 func TestFolder_HBKTolerance(t *testing.T) {
-	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como O2).
+	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como la nube).
 	store, _ := createTempStore(t)
 	store.SetNameFolding(func() bool { return true })
 
@@ -245,7 +245,7 @@ func TestFolder_HBKTolerance(t *testing.T) {
 }
 
 func TestMediaCRUD_AndCaseInsensitivity(t *testing.T) {
-	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como O2).
+	// Modo que no distingue mayúsculas (por defecto la base busca nombres exactos, como la nube).
 	store, _ := createTempStore(t)
 	store.SetNameFolding(func() bool { return true })
 
@@ -486,7 +486,6 @@ func TestSyncChanges_MockSAPI(t *testing.T) {
 	defer srv.Close()
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "vk",
 	})
 	if err != nil {

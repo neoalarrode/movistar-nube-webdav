@@ -166,9 +166,9 @@ func (s *Server) tryCaseOnlyRename(w http.ResponseWriter, r *http.Request) bool 
 		if errors.Is(err, os.ErrPermission) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 		} else {
-			// fallo de O2 (validación, red, sesión…): que el cliente lo reintente
+			// fallo de la nube (validación, red, sesión…): que el cliente lo reintente
 			w.Header().Set("Retry-After", "30")
-			http.Error(w, "Rename failed in O2 Cloud; retry later", http.StatusServiceUnavailable)
+			http.Error(w, "Rename failed in Movistar Cloud; retry later", http.StatusServiceUnavailable)
 		}
 		return true
 	}

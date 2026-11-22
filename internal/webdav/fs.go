@@ -43,14 +43,9 @@ var (
 	errStreamUploadFailed = errors.New("stream upload failed without local copy: retry the request")
 )
 
-// ErrUploadUnsupported: O2 no admite el archivo con el tipo que indica su extensión
-// (MED-1050). Se responde 415 y el cliente no debe reintentarlo.
-var ErrUploadUnsupported = errors.New("O2 Cloud does not support this file type/content (MED-1050)")
-
 // SetTransferLimits fija cuántas descargas y subidas simultáneas admite el proxy.
-// Por defecto es 1 y 1 (como el cliente oficial de escritorio). En modo web las
-// descargas van con URL firmada a CloudFront y la API la llama el navegador, así
-// que se puede abrir más. Debe llamarse al arrancar, antes de servir peticiones.
+// Las descargas van con URL firmada a CloudFront y la API la llama el navegador.
+// Debe llamarse al arrancar, antes de servir peticiones.
 func SetTransferLimits(downloads, maxUploads int) {
 	uploads := maxUploads
 	if downloads < 1 {
@@ -67,16 +62,6 @@ func SetTransferLimits(downloads, maxUploads int) {
 	globalTransferSem = make(chan struct{}, downloads+uploads)
 }
 
-// rejectUnsupported marca la subida para responder 415: O2 no admite el archivo con
-// el tipo que indica su extensión y reintentarlo no lo arreglará.
-func (w *WebDAVFileWriter) rejectUnsupported() error {
-	if w.guard != nil {
-		w.guard.unsupported.Store(true)
-	}
-	logger.Log("[WebDAV] ❌ O2 Cloud no admite '%s': su contenido no corresponde a la extensión (MED-1050). No se reintenta.", w.name)
-	return ErrUploadUnsupported
-}
-
 type uploadGuardKey struct{}
 
 type uploadGuard struct {
@@ -89,14 +74,12 @@ type uploadGuard struct {
 	// bulk: subida masiva (cabecera X-Upload-Priority: bulk); cede los huecos a las
 	// subidas normales.
 	bulk bool
-	// unsupported: O2 rechazó el archivo por su contenido (MED-1050) → 415.
-	unsupported atomic.Bool
-	// retryLater: el cuerpo llegó entero pero O2 no aceptó la subida (sesión,
+	// retryLater: el cuerpo llegó entero pero la nube no aceptó la subida (sesión,
 	// validación MED-1017, corte de red, cortafuegos…). x/net/webdav lo convierte en
 	// 405, que Hyper Backup muestra como «No permission»; se responde 503 +
 	// Retry-After para que el cliente lo reintente (issues #60 y MED-1017).
 	retryLater atomic.Bool
-	reason     atomic.Value // string: por qué O2 no aceptó la subida (va en el cuerpo del 503)
+	reason     atomic.Value // string: por qué la nube no aceptó la subida (va en el cuerpo del 503)
 }
 
 // setRetryLater marca la subida para responder 503 y guarda el motivo, sin datos de
@@ -474,7 +457,7 @@ func isMoreRecentMedia(a, b sapi.MediaItem) bool {
 func newCachedMedia(media []sapi.MediaItem) *cachedMedia {
 	byExact := make(map[string]sapi.MediaItem, len(media))
 	byLower := make(map[string]sapi.MediaItem, len(media))
-	// Nombres que solo difieren en mayúsculas son archivos distintos en O2: cada uno
+	// Nombres que solo difieren en mayúsculas son archivos distintos en la nube: cada uno
 	// se busca por su nombre exacto. byLower solo sirve de respaldo para quien pide
 	// un nombre con otras mayúsculas (clientes de Windows), y apunta al más reciente.
 	for _, m := range media {
@@ -654,7 +637,7 @@ func (mfs *MovistarFS) ClearTombstone(itemPath string) {
 }
 
 // cacheKey es la clave de las cachés en memoria (subidas recientes, carpetas
-// creadas y marcas de borrado). Distingue mayúsculas: O2 Cloud admite "A.txt" y
+// creadas y marcas de borrado). Distingue mayúsculas: Movistar Cloud admite "A.txt" y
 // "a.txt" en la misma carpeta, y con claves en minúsculas una pisaba a la otra.
 func cacheKey(p string) string { return path.Clean("/" + p) }
 
@@ -718,12 +701,12 @@ func (mfs *MovistarFS) recentUpload(key string, resolved *sapi.MediaItem) (*Memo
 
 // caseInsensitiveNames: WEBDAV_CASE_INSENSITIVE=true vuelve al comportamiento
 // anterior (un nombre con otras mayúsculas encuentra el archivo). Por defecto los
-// nombres son exactos, como en O2.
+// nombres son exactos, como en la nube.
 func (mfs *MovistarFS) caseInsensitive() bool {
 	return config.CaseInsensitiveNames()
 }
 
-// isSameEntryName: el mismo elemento de O2 (nombre idéntico, mayúsculas incluidas).
+// isSameEntryName: el mismo elemento de la nube (nombre idéntico, mayúsculas incluidas).
 func isSameEntryName(a, b string) bool { return a == b }
 
 // SetSyncInterval configures the minimum interval between automatic metadata synchronizations.
@@ -1297,7 +1280,7 @@ func (mfs *MovistarFS) resolvePathOpts(rawPath string, allowSAPI bool) (folderIn
 	if !errors.Is(err, os.ErrNotExist) || !mfs.caseInsensitive() {
 		return
 	}
-	// Nada con ese nombre exacto ni en la base ni en O2: un archivo o una carpeta
+	// Nada con ese nombre exacto ni en la base ni en la nube: un archivo o una carpeta
 	// recién creados que solo difieren en mayúsculas (clientes de Windows que piden
 	// el mismo con otras). La marca de borrado manda también aquí.
 	key := cacheKey(rawPath)
@@ -1366,7 +1349,7 @@ func (mfs *MovistarFS) resolvePathExact(rawPath string, allowSAPI bool) (folderI
 
 	// Check in-memory caches and active tombstones
 	mfs.cacheMu.RLock()
-	// Las cachés van por nombre exacto (O2 distingue mayúsculas); la búsqueda con
+	// Las cachés van por nombre exacto (la nube distingue mayúsculas); la búsqueda con
 	// otras mayúsculas se hace al final, en resolvePathOpts, si nada coincide exacto.
 	cf, cfOK := mfs.createdFolders[pathKey]
 	mem, upOK := mfs.uploadCache[pathKey]
@@ -1604,9 +1587,9 @@ func (mfs *MovistarFS) Mkdir(ctx context.Context, name string, perm os.FileMode)
 		return err
 	}
 	for _, s := range subs {
-		// Solo con el nombre exacto: O2 admite carpetas que difieren en mayúsculas.
+		// Solo con el nombre exacto: la nube admite carpetas que difieren en mayúsculas.
 		if isSameEntryName(s.Name, folderName) {
-			logger.Log("[WebDAV] ℹ Carpeta '%s' ya existía en Movistar/O2 Cloud (ID: %d). Reutilizando.", logName(cleanPath), s.ID)
+			logger.Log("[WebDAV] ℹ Carpeta '%s' ya existía en Movistar Cloud (ID: %d). Reutilizando.", logName(cleanPath), s.ID)
 			mfs.cacheMu.Lock()
 			delete(mfs.uploadCache, pathKey)
 			mfs.createdFolders[pathKey] = &CreatedFolder{Info: s, Time: time.Now()}
@@ -1685,7 +1668,7 @@ func (mfs *MovistarFS) OpenFile(ctx context.Context, name string, flag int, perm
 		}
 
 		// Chequear si ya existe un archivo con ese nombre para borrarlo antes y no crear sufijo ' (1)'
-		// Solo se sobrescribe un archivo con el nombre EXACTO: O2 admite "A.txt" y
+		// Solo se sobrescribe un archivo con el nombre EXACTO: la nube admite "A.txt" y
 		// "a.txt" juntos, y antes subir "a.txt" pisaba "A.txt" (y al revés en cada copia).
 		var existingID string
 		if err == nil && !isF && mediaInfo != nil && isSameEntryName(mediaInfo.Name, fileName) {
@@ -1751,7 +1734,7 @@ func (mfs *MovistarFS) OpenFile(ctx context.Context, name string, flag int, perm
 		// La URL de descarga se consulta a SAPI solo si de verdad se lee el contenido
 		// (primer Read), en los dos modos. x/net/webdav abre el archivo en cada PROPFIND
 		// solo para leer sus propiedades, y rclone hace un PROPFIND tras cada PUT:
-		// consultarla aquí suponía una petición extra a O2 por cada archivo subido (el
+		// consultarla aquí suponía una petición extra a la nube por cada archivo subido (el
 		// doble de tráfico en una subida masiva, y más cerca del límite del WAF).
 		r := NewWebDAVFileReader(mfs, cleanPath, item)
 		// La subida no siempre devuelve URL de descarga y SAPI tarda unos segundos en
@@ -2128,7 +2111,7 @@ func (mfs *MovistarFS) Rename(ctx context.Context, oldName, newName string) erro
 		var destToDelete *sapi.MediaItem
 		_, destMedia, destIsFolder, destErr := mfs.resolvePath(newClean)
 		// Solo es «el destino» un archivo con ese nombre exacto y distinto del que se
-		// mueve: O2 distingue mayúsculas, y en un cambio solo de mayúsculas la búsqueda
+		// mueve: la nube distingue mayúsculas, y en un cambio solo de mayúsculas la búsqueda
 		// sin distinguirlas encontraría el propio origen (y se borraría tras moverlo).
 		if destErr == nil && !destIsFolder && destMedia != nil && destMedia.ID != "" && isSameEntryName(destMedia.Name, newBaseName) && destMedia.ID != oldMedia.ID {
 			destToDelete = destMedia
@@ -2230,7 +2213,7 @@ func (mfs *MovistarFS) Rename(ctx context.Context, oldName, newName string) erro
 }
 
 // Espera máxima a que SAPI sirva un archivo recién subido antes de re-subirlo
-// (en O2 Cloud se ha medido del orden de 10 s tras la subida).
+// (en Movistar Cloud se ha medido del orden de 10 s tras la subida).
 var (
 	reuploadSourceWait = 45 * time.Second
 	reuploadSourcePoll = 2 * time.Second
@@ -2362,7 +2345,7 @@ func (mfs *MovistarFS) finishReupload(oldMedia *sapi.MediaItem, reader io.ReadSe
 				// del metadato confirma el destino; no se fuerza una descarga de relectura
 				// (el contenido ya lo garantizan los bytes exactos que tenemos en memoria).
 				//
-				// AVISO (coste medido contra O2 real): confirmar el destino por metadato
+				// AVISO (coste medido contra la nube real): confirmar el destino por metadato
 				// añade la espera a que SAPI indexe el recién subido, así que un renombrado
 				// pequeño con cambio de extensión pasa de ~1 s a unos segundos. Se elige a
 				// propósito por seguridad (no borrar el origen sin confirmar el destino). Si
@@ -2370,7 +2353,7 @@ func (mfs *MovistarFS) finishReupload(oldMedia *sapi.MediaItem, reader io.ReadSe
 				// Duplicati), aquí es donde se podría relajar a confiar solo en la copia en
 				// RAM. No se ha hecho: el proyecto prioriza no perder datos.
 				//
-				// Nota: el etag de O2 NO sirve para verificar sin descargar; es un resumen
+				// Nota: el etag de la nube NO sirve para verificar sin descargar; es un resumen
 				// de 16 bytes sobre el objeto almacenado (cifrado), no el hash del contenido
 				// original (comprobado contra la cuenta real), y no hay otro checksum del
 				// contenido en el SAPI.
@@ -2537,7 +2520,7 @@ type WebDAVFileWriter struct {
 	parentFolderID int64
 	existingID     string
 	existingItem   *sapi.MediaItem // el archivo que se sobrescribe (para reenviar su fecha de creación)
-	ctx            context.Context // petición del cliente: si se va, la subida a O2 se aborta
+	ctx            context.Context // petición del cliente: si se va, la subida a la nube se aborta
 	buf            *bytes.Buffer
 	tmpFile        *os.File
 	size           int64
@@ -2603,7 +2586,7 @@ func (w *WebDAVFileWriter) upload(body io.Reader, size int64, mimeType string) (
 	return w.mfs.client.UploadFileToFolderCtx(ctx, w.name, body, size, w.parentFolderID, mimeType, w.sapiExistingID(), w.modTime)
 }
 
-// replaceWithEmpty vacía un archivo que tenía contenido. O2 no admite sobrescribir un
+// replaceWithEmpty vacía un archivo que tenía contenido. La nube no admite sobrescribir un
 // archivo con 0 bytes: responde MED-1049 «Wrong byte uploaded» al envío vacío
 // (comprobado el 20/11/2026), aunque sí crea archivos nuevos de 0 bytes. Se sube uno
 // nuevo vacío y, cuando está, se manda el anterior a la papelera, como hace la app al
@@ -2670,7 +2653,7 @@ func (w *WebDAVFileWriter) startStreamUpload(initialBytes []byte) {
 	w.streamDone = make(chan streamUploadResult, 1)
 	expectedSize := w.guard.expected
 	sizeMB := float64(expectedSize) / (1024 * 1024)
-	logger.Log("[WebDAV] ⬆ Subiendo en flujo directo: '%s' (%.2f MB) a Movistar/O2 Cloud...", logName(w.path), sizeMB)
+	logger.Log("[WebDAV] ⬆ Subiendo en flujo directo: '%s' (%.2f MB) a Movistar Cloud...", logName(w.path), sizeMB)
 	mimeType := mime.TypeByExtension(filepath.Ext(w.name))
 
 	go func() {
@@ -3118,11 +3101,8 @@ func (w *WebDAVFileWriter) Close() error {
 			if w.guard != nil {
 				w.guard.tooLarge.Store(true)
 			}
-			logger.Log("[WebDAV] ❌ Subida rechazada por Movistar/O2 Cloud (MED-1020 tamaño máximo excedido): '%s'", w.name)
+			logger.Log("[WebDAV] ❌ Subida rechazada por Movistar Cloud (MED-1020 tamaño máximo excedido): '%s'", w.name)
 			return ErrUploadTooLarge
-		} else if errors.Is(res.err, sapi.ErrMediaUnsupported) && !config.UnsupportedAsFile() {
-			w.cleanupTemp()
-			return w.rejectUnsupported()
 		} else if w.streamOnly {
 			// Sin copia local no hay con qué reintentar: que lo repita el cliente.
 			w.guard.streamFailed.Store(true)
@@ -3137,7 +3117,7 @@ func (w *WebDAVFileWriter) Close() error {
 	}
 
 	if media == nil {
-		logger.Log("[WebDAV] ⬆ Subiendo: '%s' (%.2f MB) a Movistar/O2 Cloud...", logName(w.path), sizeMB)
+		logger.Log("[WebDAV] ⬆ Subiendo: '%s' (%.2f MB) a Movistar Cloud...", logName(w.path), sizeMB)
 
 		if w.queued {
 			logger.Log("[WebDAV] ⏳ '%s' esperando hueco de subida en la cola...", w.name)
@@ -3175,11 +3155,8 @@ func (w *WebDAVFileWriter) Close() error {
 				if w.guard != nil {
 					w.guard.tooLarge.Store(true)
 				}
-				logger.Log("[WebDAV] ❌ Subida rechazada por Movistar/O2 Cloud (MED-1020 tamaño máximo excedido): '%s'", w.name)
+				logger.Log("[WebDAV] ❌ Subida rechazada por Movistar Cloud (MED-1020 tamaño máximo excedido): '%s'", w.name)
 				return ErrUploadTooLarge
-			}
-			if errors.Is(err, sapi.ErrMediaUnsupported) {
-				return w.rejectUnsupported()
 			}
 			logger.Log("[WebDAV] ❌ Error al subir '%s': %v", w.name, err)
 			w.guard.setRetryLater(err)

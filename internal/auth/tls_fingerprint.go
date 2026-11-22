@@ -230,7 +230,7 @@ func dialTLSContextWithUTLSNoALPN(ctx context.Context, network, addr string) (ne
 }
 
 // UploadResponseTimeout es lo que se espera la respuesta del servidor de subidas una vez
-// enviado el archivo. Con archivos de cientos de MB, O2 tarda a veces más de 60 s en
+// enviado el archivo. Con archivos de cientos de MB, la nube tarda a veces más de 60 s en
 // responder tras recibirlos (15/11/2026: 189 MB, dos intentos cortados por "timeout
 // awaiting response headers"; otro de 153 MB respondió a los 87 s). Por defecto 5 min,
 // configurable con UPLOAD_RESPONSE_TIMEOUT_SEC.
@@ -250,17 +250,10 @@ func UploadResponseTimeout() time.Duration {
 type fingerprintedTransport struct {
 	h1 *http.Transport
 	h2 *http2.Transport
-	// sapiH1, si no es nil, sustituye a h2 para los hosts SAPI: el perfil
-	// "desktop" habla HTTP/1.1, como el cliente oficial (Qt 5). CloudFront corta
-	// las peticiones de un dispositivo "fol-" que llegan por HTTP/2.
-	sapiH1 *http.Transport
 }
 
 func (t *fingerprintedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.URL.Scheme == "https" && !strings.HasPrefix(req.URL.Hostname(), "upload.") {
-		if t.sapiH1 != nil {
-			return t.sapiH1.RoundTrip(req)
-		}
 		return t.h2.RoundTrip(req)
 	}
 	return t.h1.RoundTrip(req)
@@ -270,14 +263,6 @@ func (t *fingerprintedTransport) RoundTrip(req *http.Request) (*http.Response, e
 func (t *fingerprintedTransport) CloseIdleConnections() {
 	t.h1.CloseIdleConnections()
 	t.h2.CloseIdleConnections()
-	if t.sapiH1 != nil {
-		t.sapiH1.CloseIdleConnections()
-	}
-}
-
-// UsesHTTP1ForSAPI indica si los hosts SAPI van por HTTP/1.1 (perfil "desktop").
-func (t *fingerprintedTransport) UsesHTTP1ForSAPI() bool {
-	return t.sapiH1 != nil
 }
 
 // HTTP1Transport expone el transporte HTTP/1.1 subyacente (subidas y URLs planas)
@@ -319,24 +304,7 @@ func NewFingerprintedTransport() http.RoundTripper {
 		h1.DialTLSContext = dialTLSContextHTTP1Only
 	}
 
-	ft := &fingerprintedTransport{h1: h1, h2: h2}
-	return ft
-}
-
-// newSAPIHTTP1Transport es el transporte de los hosts SAPI en el perfil "desktop":
-// HTTP/1.1 con keep-alive (como el cliente oficial) y ALPN "http/1.1".
-func newSAPIHTTP1Transport() *http.Transport {
-	return &http.Transport{
-		DialContext:           newDialer().DialContext,
-		DialTLSContext:        dialTLSContextHTTP1Only,
-		ForceAttemptHTTP2:     false,
-		TLSHandshakeTimeout:   15 * time.Second,
-		ResponseHeaderTimeout: 60 * time.Second,
-		IdleConnTimeout:       90 * time.Second,
-		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   20,
-		MaxConnsPerHost:       100,
-	}
+	return &fingerprintedTransport{h1: h1, h2: h2}
 }
 
 // NewHTTP1FingerprintedTransport mantiene la huella uTLS pero fuerza ALPN

@@ -49,7 +49,6 @@ func TestPropfindDoesNotReturnEmptySuccessWhenProviderFails(t *testing.T) {
 	defer mockSAPI.Close()
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

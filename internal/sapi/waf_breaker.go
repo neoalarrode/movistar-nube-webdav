@@ -14,7 +14,7 @@ import (
 	"movistar-webdav-proxy/internal/logger"
 )
 
-// Freno ante el bloqueo del cortafuegos (AWS WAF / CloudFront) de O2 Cloud.
+// Freno ante el bloqueo del cortafuegos (AWS WAF / CloudFront) de Movistar Cloud.
 //
 // Cuando CloudFront empieza a responder "403 ERROR - The request could not be
 // satisfied", el bloqueo es por IP: afecta a todas las cuentas que salgan por esa IP, y
@@ -34,8 +34,8 @@ import (
 // devuelve ErrWAFBlocked sin tocar la red. Pasado ese tiempo, la siguiente petición
 // hace de sonda: si funciona, se vuelve a la normalidad; si no, se espera el doble.
 
-// ErrWAFBlocked indica que el cliente está en pausa por un bloqueo del WAF de O2.
-var ErrWAFBlocked = errors.New("O2 Cloud: cortafuegos (WAF) bloqueando; llamadas a O2 en pausa")
+// ErrWAFBlocked indica que el cliente está en pausa por un bloqueo del WAF de la nube.
+var ErrWAFBlocked = errors.New("Movistar Cloud: cortafuegos (WAF) bloqueando; llamadas a la nube en pausa")
 
 var (
 	wafCooldownBase = 10 * time.Minute
@@ -67,7 +67,7 @@ func (b *wafBreaker) blockedUntil() time.Time {
 }
 
 // trip registra un 403 del WAF y devuelve hasta cuándo queda en pausa. que describe lo
-// que se pausa, para el registro ("las llamadas a la API de O2", "las SUBIDAS a O2").
+// que se pausa, para el registro ("las llamadas a la API de la nube", "las SUBIDAS a la nube").
 func (b *wafBreaker) trip(que string) time.Time {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -85,7 +85,7 @@ func (b *wafBreaker) trip(que string) time.Time {
 		d = wafCooldownMax
 	}
 	b.until = now.Add(d)
-	logger.Log("[WAF] 🛑 O2 (CloudFront) ha respondido 403: el cortafuegos bloquea esta IP. Pauso %s durante %s (hasta las %s, bloqueo %d seguido). Reintentar antes solo alarga el bloqueo.",
+	logger.Log("[WAF] 🛑 Movistar Cloud (CloudFront) ha respondido 403: el cortafuegos bloquea esta IP. Pauso %s durante %s (hasta las %s, bloqueo %d seguido). Reintentar antes solo alarga el bloqueo.",
 		que, d, b.until.Local().Format("15:04"), b.strikes)
 	return b.until
 }
@@ -129,13 +129,13 @@ func isWAFBlockResponse(resp *http.Response) bool {
 func (c *Client) breakerFor(req *http.Request) (*wafBreaker, string, string) {
 	if req != nil && req.URL != nil && strings.HasPrefix(req.URL.Path, "/sapi/upload") {
 		if u, err := url.Parse(c.uploadURL); err == nil && u.Host == req.URL.Host {
-			return &c.wafUpload, "las SUBIDAS a O2", "El servidor de subidas de O2"
+			return &c.wafUpload, "las SUBIDAS a la nube", "El servidor de subidas de la nube"
 		}
 	}
-	return &c.waf, "las llamadas a la API de O2 (las subidas siguen)", "La API de O2"
+	return &c.waf, "las llamadas a la API de la nube (las subidas siguen)", "La API de la nube"
 }
 
-// WAFBlockedUntil devuelve hasta cuándo está en pausa la API de O2 por un bloqueo del
+// WAFBlockedUntil devuelve hasta cuándo está en pausa la API de la nube por un bloqueo del
 // WAF, o el tiempo cero si no hay bloqueo.
 func (c *Client) WAFBlockedUntil() time.Time {
 	return c.waf.blockedUntil()
@@ -148,7 +148,7 @@ func (c *Client) WAFUploadBlockedUntil() time.Time {
 }
 
 // ClearWAFPause termina las pausas en curso (sin olvidar los bloqueos seguidos): la
-// siguiente petición sale a O2 y hace de sonda. Pensado para pruebas.
+// siguiente petición sale a la nube y hace de sonda. Pensado para pruebas.
 func (c *Client) ClearWAFPause() {
 	for _, b := range []*wafBreaker{&c.waf, &c.wafUpload} {
 		b.mu.Lock()

@@ -16,12 +16,12 @@ import (
 )
 
 // rclone hace un PROPFIND de cada archivo justo después de subirlo, y x/net/webdav abre
-// el archivo para leer sus propiedades. Eso no debe provocar ninguna llamada a O2: la
+// el archivo para leer sus propiedades. Eso no debe provocar ninguna llamada a la nube: la
 // URL de descarga solo se consulta si alguien lee el contenido.
-func TestPropfindTrasSubida_NoLlamaAO2(t *testing.T) {
-	// cuenta las llamadas a O2 aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
+func TestPropfindTrasSubida_NoLlamaALaNube(t *testing.T) {
+	// cuenta las llamadas a la nube aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
 	t.Setenv("SAPI_REFRESH_AFTER_UPLOAD", "false")
-	f := &fakeO2{}
+	f := &fakeNube{}
 	f.set(true, false)
 	srv, payload := uploadThenServer(t, f)
 
@@ -35,7 +35,7 @@ func TestPropfindTrasSubida_NoLlamaAO2(t *testing.T) {
 		}
 	}
 	if n := f.queryCount(); n != 0 {
-		t.Fatalf("PROPFIND tras subir no debe consultar a O2; hubo %d consultas", n)
+		t.Fatalf("PROPFIND tras subir no debe consultar a la nube; hubo %d consultas", n)
 	}
 
 	// Al leer el contenido sí se consulta (una vez) y se descarga bien.
@@ -47,9 +47,9 @@ func TestPropfindTrasSubida_NoLlamaAO2(t *testing.T) {
 	}
 }
 
-// Con la API de O2 bloqueada por el cortafuegos, las escrituras que la necesitan deben
-// responder 503 + Retry-After sin enviar nada a O2, en vez de 409/500 que rclone reintenta.
-func TestEscriturasDuranteBloqueoWAF_503SinLlamarAO2(t *testing.T) {
+// Con la API de la nube bloqueada por el cortafuegos, las escrituras que la necesitan deben
+// responder 503 + Retry-After sin enviar nada a la nube, en vez de 409/500 que rclone reintenta.
+func TestEscriturasDuranteBloqueoWAF_503SinLlamarALaNube(t *testing.T) {
 	var hits int32
 	mock := newShimServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&hits, 1)
@@ -60,16 +60,14 @@ func TestEscriturasDuranteBloqueoWAF_503SinLlamarAO2(t *testing.T) {
 	}))
 	t.Cleanup(mock.Close)
 
-	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", ValidationKey: "vk",
-	})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	client.SetBaseURLs(mock.URL+"/sapi", mock.URL)
 	srv := NewServerWithAuth(client, config.AuthConfig{AuthDisabled: true})
 
-	// Primera escritura: llega a O2, que responde 403 del WAF; el cliente entra en pausa.
+	// Primera escritura: llega a la nube, que responde 403 del WAF; el cliente entra en pausa.
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, httptest.NewRequest("MKCOL", "/Fotos/", nil))
 	if client.WAFBlockedUntil().IsZero() {
@@ -103,11 +101,11 @@ func TestEscriturasDuranteBloqueoWAF_503SinLlamarAO2(t *testing.T) {
 		}
 	}
 	if n := atomic.LoadInt32(&hits); n != antes {
-		t.Errorf("durante el bloqueo no debe salir ninguna petición a O2; salieron %d", n-antes)
+		t.Errorf("durante el bloqueo no debe salir ninguna petición a la nube; salieron %d", n-antes)
 	}
 }
 
-// La API de O2 (detrás del WAF) y el servidor de subidas tienen frenos separados. Medido el
+// La API de la nube (detrás del WAF) y el servidor de subidas tienen frenos separados. Medido el
 // 12/11/2026: 113 subidas seguidas sin un 403 propio mientras la API se bloqueaba cada ~10
 // llamadas; con un freno único, cada bloqueo de la API paraba también las subidas.
 // Con la API en pausa, un PUT a una carpeta que ya existe debe subir el archivo (al
@@ -140,9 +138,7 @@ func TestSubidaDuranteBloqueoDeLaAPI(t *testing.T) {
 	_ = ms.SetInitialSync()
 	_ = ms.UpsertFolder(sapi.FolderItem{ID: 10, Name: "Fotos", ParentID: 1})
 
-	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", ValidationKey: "vk",
-	})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +181,7 @@ func TestSubidaDuranteBloqueoDeLaAPI(t *testing.T) {
 // local: subir un archivo nuevo no debe hacer ninguna llamada a la API (antes, 2 por
 // archivo: ListAllSubfolders + ListAllMediaInFolder, lo que disparaba el WAF).
 func TestSubidaNuevaSinConsultarALaAPI(t *testing.T) {
-	// cuenta las llamadas a O2 aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
+	// cuenta las llamadas a la nube aparte de la relectura tras subir (SAPI_REFRESH_AFTER_UPLOAD)
 	t.Setenv("SAPI_REFRESH_AFTER_UPLOAD", "false")
 	var apiHits, uploadHits int32
 	mock := newShimServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -212,9 +208,7 @@ func TestSubidaNuevaSinConsultarALaAPI(t *testing.T) {
 	_ = ms.SetInitialSync()
 	_ = ms.UpsertFolder(sapi.FolderItem{ID: 10, Name: "Fotos", ParentID: 1})
 
-	client, err := sapi.NewClient(config.AccountConfig{
-		Provider: "o2", ValidationKey: "vk",
-	})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
