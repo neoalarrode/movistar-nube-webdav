@@ -41,7 +41,6 @@ func TestUploadFileToFolder_Retries408WithFreshConnection(t *testing.T) {
 	defer srv.Close()
 
 	client, err := NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "v",
 	})
 	if err != nil {
@@ -63,7 +62,6 @@ func TestUploadFileToFolder_Retries408WithFreshConnection(t *testing.T) {
 
 func TestUploadTransportDisablesKeepAlives(t *testing.T) {
 	client, err := NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "v",
 	})
 	if err != nil {

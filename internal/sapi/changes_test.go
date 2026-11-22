@@ -19,7 +19,6 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) (*Client, *httptest.S
 	t.Cleanup(srv.Close)
 
 	c, err := NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test_vk",
 	})
 	if err != nil {

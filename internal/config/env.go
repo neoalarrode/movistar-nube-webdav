@@ -43,23 +43,15 @@ func init() {
 }
 
 type AccountConfig struct {
-	Provider      string `json:"provider"`
 	JSessionID    string `json:"jsessionid"`
 	ValidationKey string `json:"validationkey"`
 	DeviceID      string `json:"device_id"`
 	DeviceName    string `json:"device_name"`
 }
 
-// WebSessionEnabled indica si se usa el modo web (WEB_SESSION=true): acceso a
-// Movistar Cloud con una sesión de la web oficial en un Chromium sin pantalla.
-// Es el único modo del proxy: activo salvo con WEB_SESSION=false (solo para pruebas).
-func WebSessionEnabled() bool {
-	return !strings.EqualFold(strings.TrimSpace(os.Getenv("WEB_SESSION")), "false")
-}
-
 // TransferLimits devuelve las descargas y subidas simultáneas (WEBDAV_MAX_DOWNLOADS,
 // WEBDAV_MAX_UPLOADS). Por defecto 4 descargas y 2 subidas (la web sube de 2 en 2).
-func TransferLimits(webMode bool) (downloads, uploads int) {
+func TransferLimits() (downloads, uploads int) {
 	downloads, uploads = 4, 2
 	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WEBDAV_MAX_DOWNLOADS"))); err == nil && n > 0 {
 		downloads = n

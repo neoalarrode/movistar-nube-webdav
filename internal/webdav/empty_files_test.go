@@ -160,7 +160,6 @@ func setupTestWebDAVServerWithDB(t *testing.T) (*Server, *cache.MetadataStore, s
 	}))
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -524,7 +523,6 @@ func TestVirtualEmptyFiles_BootstrapAfterDelayedSync(t *testing.T) {
 	defer mockSAPI.Close()
 
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -564,7 +562,6 @@ func TestVirtualEmptyFiles_BootstrapAfterDelayedSync(t *testing.T) {
 
 func TestAutoHealHyperBackupWriter_WithoutSeqMapping(t *testing.T) {
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {
@@ -620,7 +617,7 @@ func TestEmptyFiles_BootstrapKeepsUnsyncedLocalState(t *testing.T) {
 		}
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +665,7 @@ func TestEmptyFiles_ManifestNotReuploadedWhenUnchanged(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{}}`))
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -711,7 +708,7 @@ func TestEmptyFiles_ManifestNotReuploadedWhenUnchanged(t *testing.T) {
 }
 
 // Contenedor nuevo o base local borrada: la base no ha cargado nunca el manifiesto de
-// la nube. Aunque un cliente suba algo nada más arrancar (y eso marque cambios
+// La nube. Aunque un cliente suba algo nada más arrancar (y eso marque cambios
 // pendientes), no se puede subir el estado local, casi vacío, sobre el manifiesto: se
 // perderían los .cinfo de Hyper Backup («cloud-seq-id [1]» y ST_CLOUD_NOT_SYNC_OLDER,
 // issue #60). Primero se carga y combina el de la nube.
@@ -744,7 +741,7 @@ func TestEmptyFiles_FreshDatabaseLoadsCloudManifestEvenIfDirty(t *testing.T) {
 		}
 	}))
 	defer mockSAPI.Close()
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

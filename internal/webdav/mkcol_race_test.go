@@ -56,7 +56,7 @@ func folderCloud(t *testing.T) *MovistarFS {
 		}
 	}))
 	t.Cleanup(mock.Close)
-	client, err := sapi.NewClient(config.AccountConfig{Provider: "movistar", ValidationKey: "vk"})
+	client, err := sapi.NewClient(config.AccountConfig{ValidationKey: "vk"})
 	if err != nil {
 		t.Fatal(err)
 	}

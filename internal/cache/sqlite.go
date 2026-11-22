@@ -442,7 +442,7 @@ func (s *MetadataStore) GetFolderByParentAndName(parentID int64, name string) (*
 		ORDER BY CASE WHEN name = ? COLLATE BINARY THEN 0 ELSE 1 END
 		LIMIT 1
 	`
-	// O2 distingue mayúsculas: primero la carpeta con el nombre exacto.
+	// La nube distingue mayúsculas: primero la carpeta con el nombre exacto.
 	row := s.db.QueryRow(query, parentID, name, name)
 	f, err := scanFolder(row.Scan)
 	if err == nil {
@@ -557,7 +557,7 @@ func (s *MetadataStore) GetMediaByFolderAndName(folderID int64, name string) (*s
 		WHERE folder_id = ? AND name = ? COLLATE ` + s.nameCollation() + `
 		ORDER BY CASE WHEN name = ? COLLATE BINARY THEN 0 ELSE 1 END, modification_date DESC, id DESC
 	`
-	// O2 distingue mayúsculas ("A.txt" y "a.txt" son archivos distintos): manda el
+	// La nube distingue mayúsculas ("A.txt" y "a.txt" son archivos distintos): manda el
 	// nombre exacto; otro con distintas mayúsculas solo sirve si no hay exacto.
 	rows, err := s.db.Query(query, folderID, name, name)
 	if err != nil {
@@ -634,7 +634,7 @@ func (s *MetadataStore) ListMediaInFolder(folderID int64) ([]sapi.MediaItem, err
 			return nil, fmt.Errorf("scan media row in folder %d: %w", folderID, err)
 		}
 		// Solo son duplicados los del mismo nombre exacto: "A.txt" y "a.txt" son
-		// dos archivos en O2 y se listan los dos.
+		// dos archivos en la nube y se listan los dos.
 		if m.Name != lastName {
 			flushGroup()
 			lastName = m.Name

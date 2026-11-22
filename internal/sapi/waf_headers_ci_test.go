@@ -70,7 +70,6 @@ func TestCI_CloudFrontWAF_RejectsLegacyFolDeviceIDAndBadUserAgent(t *testing.T) 
 	defer server.Close()
 
 	client, err := NewClient(config.AccountConfig{
-		Provider:   "movistar",
 		DeviceID:   "fol-xShd2lUKwcsWLi7YPhSfnA==",
 		DeviceName: "PC Windows",
 	})

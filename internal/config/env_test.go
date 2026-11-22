@@ -117,12 +117,12 @@ func TestGetSyncInterval(t *testing.T) {
 func TestTransferLimits(t *testing.T) {
 	t.Setenv("WEBDAV_MAX_DOWNLOADS", "")
 	t.Setenv("WEBDAV_MAX_UPLOADS", "")
-	if d, u := TransferLimits(true); d != 4 || u != 2 {
+	if d, u := TransferLimits(); d != 4 || u != 2 {
 		t.Errorf("por defecto: esperado 4/2, obtenido %d/%d", d, u)
 	}
 	t.Setenv("WEBDAV_MAX_DOWNLOADS", "6")
 	t.Setenv("WEBDAV_MAX_UPLOADS", "0")
-	if d, u := TransferLimits(true); d != 6 || u != 2 {
+	if d, u := TransferLimits(); d != 6 || u != 2 {
 		t.Errorf("con variables: esperado 6/2 (0 se ignora), obtenido %d/%d", d, u)
 	}
 }

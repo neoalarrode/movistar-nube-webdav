@@ -218,12 +218,12 @@ func (t *TelegramNotifier) sendExtra(text string, asHTML bool, extra map[string]
 	return nil
 }
 
-func (t *TelegramNotifier) SendSessionExpiredAlert(provider, phone, details string) error {
+func (t *TelegramNotifier) SendSessionExpiredAlert(details string) error {
 	t.mu.Lock()
 	if t.lastAlerts == nil {
 		t.lastAlerts = make(map[string]time.Time)
 	}
-	key := "session_expired_" + phone
+	key := "session_expired"
 	if lastTime, exists := t.lastAlerts[key]; exists && time.Since(lastTime) < time.Hour {
 		t.mu.Unlock()
 		return nil
@@ -231,34 +231,20 @@ func (t *TelegramNotifier) SendSessionExpiredAlert(provider, phone, details stri
 	t.lastAlerts[key] = time.Now()
 	t.mu.Unlock()
 
-	providerName := "Movistar Cloud"
-	if strings.EqualFold(provider, "o2") {
-		providerName = "O2 Cloud"
-	}
-
 	msg := fmt.Sprintf(
-		"⚠️ <b>Sesión de %s caducada</b>\n\n"+
-			"El Proxy WebDAV no puede acceder a tus archivos porque la sesión para la línea <b>%s</b> ha expirado.\n\n"+
+		"⚠️ <b>Sesión de Movistar Cloud caducada</b>\n\n"+
+			"El proxy WebDAV no puede acceder a tus archivos porque la sesión ha expirado.\n\n"+
 			"Detalle: %s\n"+
 			"Hora: %s\n\n"+
 			"Por favor, abre el panel Web para revincular tu dispositivo.",
-		html.EscapeString(providerName), html.EscapeString(logger.Mask(phone)), html.EscapeString(details), time.Now().Format("2006-01-02 15:04:05"),
+		html.EscapeString(details), time.Now().Format("2006-01-02 15:04:05"),
 	)
 	return t.sendHTML(msg)
 }
 
-func (t *TelegramNotifier) SendTestAlert(provider string) error {
-	providerName := "Movistar Cloud"
-	if strings.EqualFold(provider, "o2") {
-		providerName = "O2 Cloud"
-	}
-
-	msg := fmt.Sprintf(
-		"🔔 <b>Notificaciones WebDAV de %s activas</b>\n\n"+
-			"El Gateway WebDAV está conectado con Telegram y listo para avisarte ante cualquier evento o expiración de sesión.",
-		html.EscapeString(providerName),
-	)
-	return t.sendHTML(msg)
+func (t *TelegramNotifier) SendTestAlert() error {
+	return t.sendHTML("🔔 <b>Notificaciones WebDAV de Movistar Cloud activas</b>\n\n" +
+		"El proxy WebDAV está conectado con Telegram y listo para avisarte ante cualquier evento o caducidad de sesión.")
 }
 
 // Para que se use de forma global
@@ -322,10 +308,10 @@ func (t *TelegramNotifier) Credentials() (string, string) {
 
 // SendTestWith manda el mensaje de prueba con unas credenciales concretas sin
 // cambiar las activas (probar no debe dejar puesto lo que no se ha guardado).
-func SendTestWith(botToken, chatID, provider string) error {
+func SendTestWith(botToken, chatID string) error {
 	t := &TelegramNotifier{botToken: strings.TrimSpace(botToken), chatID: strings.TrimSpace(chatID),
 		client: newClient(10 * time.Second), lastAlerts: map[string]time.Time{}}
-	return t.SendTestAlert(provider)
+	return t.SendTestAlert()
 }
 
 // DetectedChat es un chat que ha escrito al bot (para no tener que buscar el ID a mano).

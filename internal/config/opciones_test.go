@@ -33,16 +33,3 @@ func TestEnvHelpers(t *testing.T) {
 		t.Error("envBool(no reconocido) debía dar el valor por defecto")
 	}
 }
-
-// Por defecto, como la app: una imagen que O2 rechaza por su contenido no se vuelve a
-// subir como genérico.
-func TestUnsupportedAsFileIsOptIn(t *testing.T) {
-	t.Setenv("SAPI_UNSUPPORTED_AS_FILE", "")
-	if UnsupportedAsFile() {
-		t.Error("por defecto debe estar desactivado")
-	}
-	t.Setenv("SAPI_UNSUPPORTED_AS_FILE", "true")
-	if !UnsupportedAsFile() {
-		t.Error("con true debe activarse")
-	}
-}

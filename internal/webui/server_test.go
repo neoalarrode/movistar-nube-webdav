@@ -26,7 +26,6 @@ func setupTestWebUI(t *testing.T, authCfg config.AuthConfig) (http.Handler, stri
 	t.Cleanup(func() { config.TokensDir = origTokensDir })
 
 	cfg := config.AccountConfig{
-		Provider: "movistar",
 		DeviceID: "fol-secretdevice1234",
 	}
 

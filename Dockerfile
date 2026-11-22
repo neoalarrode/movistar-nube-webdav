@@ -33,8 +33,7 @@ COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Chromium escribe caché y configuración en HOME; con read_only se apunta a /tmp (tmpfs).
-ENV WEB_SESSION=true \
-    CHROME_PATH=/usr/bin/chromium \
+ENV CHROME_PATH=/usr/bin/chromium \
     CHROME_NO_SANDBOX=true \
     HOME=/tmp \
     XDG_CONFIG_HOME=/tmp/.config \

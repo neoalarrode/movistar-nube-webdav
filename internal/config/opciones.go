@@ -24,14 +24,8 @@ func CaseInsensitiveNames() bool {
 	return true
 }
 
-// UnsupportedAsFile (SAPI_UNSUPPORTED_AS_FILE, por defecto false): si O2 rechaza una
-// imagen, audio o vídeo porque su contenido no corresponde a la extensión (MED-1050),
-// volver a subirlo como archivo genérico (upload/file) para que no se pierda. La app
-// oficial no lo hace: deja el archivo sin subir. Solo para archivos nuevos.
-func UnsupportedAsFile() bool { return envBool("SAPI_UNSUPPORTED_AS_FILE", false) }
-
 // EscapeNames (SAPI_ESCAPE_NAMES, por defecto true): guardar en la nube, cambiando un
-// punto por «%2E», los nombres de archivo que O2 no admite (los que empiezan o
+// punto por «%2E», los nombres de archivo que la nube no admite (los que empiezan o
 // terminan en punto y los que terminan en .tmp). Ver internal/sapi/nombres.go.
 func EscapeNames() bool { return envBool("SAPI_ESCAPE_NAMES", true) }
 

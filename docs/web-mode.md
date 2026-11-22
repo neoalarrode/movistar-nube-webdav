@@ -87,7 +87,6 @@ papelera.
 
 | Variable | Por defecto | Descripción |
 |---|---|---|
-| `WEB_SESSION` | `true` | Modo web, el único del proxy (`false` solo en pruebas). |
 | `CHROME_PATH` | autodetectar (`/usr/bin/chromium` en la imagen) | Ejecutable de Chromium/Chrome. |
 | `CHROME_NO_SANDBOX` | `false` (`true` en la imagen) | Lanza Chromium sin sandbox (necesario como root en contenedores). |
 | `WEB_SESSION_RENEW_BEFORE` | `1h` | Margen antes de la caducidad de 24 h para renovar la sesión. |

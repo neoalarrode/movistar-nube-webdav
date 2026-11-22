@@ -60,10 +60,6 @@ func main() {
 	// Telegram guardado desde el panel; si no, TELEGRAM_BOT_TOKEN y TELEGRAM_CHAT_ID.
 	notifier.LoadStored()
 
-	if !config.WebSessionEnabled() {
-		logger.Log("[!] ⚠️ WEB_SESSION=false: el proxy solo funciona con la sesión web de Movistar Cloud.")
-	}
-
 	// log Huella TLS (uTLS)
 	client, err := sapi.NewClient(cfg)
 	if err != nil {
@@ -71,55 +67,49 @@ func main() {
 		_ = notifier.Alert(
 			"",
 			"❌", "Fallo crítico en cliente SAPI",
-			"No se pudo inicializar el cliente de conexión con Movistar/O2 Cloud usando la configuración actual. El proxy se ha detenido. Revisa los archivos de configuración o logs y reinicia el contenedor.",
+			"No se pudo inicializar el cliente de conexión con Movistar Cloud usando la configuración actual. El proxy se ha detenido. Revisa los archivos de configuración o logs y reinicia el contenedor.",
 			err.Error(),
 		)
 		os.Exit(1)
 	}
 
-	// Modo web: Movistar Cloud se usa como la web oficial, con un Chromium sin
-	// pantalla que guarda la sesión, en lugar de los tokens del cliente de escritorio.
-	var webSess *webclient.Session
-	if config.WebSessionEnabled() {
-		webSess, err = webclient.NewSession(webclient.Options{
-			ProfileDir: filepath.Join(config.TokensDir, "webprofile"),
-			ChromePath: strings.TrimSpace(os.Getenv("CHROME_PATH")),
-			NoSandbox:  strings.EqualFold(strings.TrimSpace(os.Getenv("CHROME_NO_SANDBOX")), "true"),
-		})
-		if err != nil {
-			logger.Log("[FATAL] Error iniciando la sesión web (Chromium): %v", err)
-			_ = notifier.Alert(
-				"",
-				"❌", "Fallo crítico al iniciar el navegador (Modo Web)",
-				"No se pudo arrancar (NewSession) el navegador sin pantalla con el perfil indicado y el proxy se ha detenido.",
-				err.Error(),
-			)
-			os.Exit(1)
-		}
-		defer webSess.Close()
-		// Descargas firmadas y subidas directas con la huella TLS de Chrome (uTLS), a juego
-		// con el User-Agent del Chromium de la sesión.
-		client.EnableWebSession(webSess, &webclient.Transport{Session: webSess, Base: auth.NewFingerprintedTransport()})
-		logger.Log("[WebDAV] 🌐 Modo Autenticación: SESIÓN WEB (navegador)")
-		checkCtx, checkCancel := context.WithTimeout(context.Background(), 45*time.Second)
-		if !webSess.CheckLogin(checkCtx) {
-			logger.Log("[!] ⚠️ Sesión web no iniciada. Abre el panel en /web-login/ para iniciar sesión en Movistar Cloud.")
-			_ = notifier.Alert(
-				"",
-				"", "Sesión web no iniciada (Modo Web)",
-				"Accede al panel web en /web-login/ para iniciar sesión en Movistar/O2 Cloud.",
-				"Arranque sin sesión activa, en espera de vinculación",
-			)
-		}
-		checkCancel()
+	// Movistar Cloud se usa como la web oficial, con un Chromium sin pantalla que
+	// guarda la sesión.
+	webSess, err := webclient.NewSession(webclient.Options{
+		ProfileDir: filepath.Join(config.TokensDir, "webprofile"),
+		ChromePath: strings.TrimSpace(os.Getenv("CHROME_PATH")),
+		NoSandbox:  strings.EqualFold(strings.TrimSpace(os.Getenv("CHROME_NO_SANDBOX")), "true"),
+	})
+	if err != nil {
+		logger.Log("[FATAL] Error iniciando la sesión web (Chromium): %v", err)
+		_ = notifier.Alert(
+			"",
+			"❌", "Fallo crítico al iniciar el navegador (Modo Web)",
+			"No se pudo arrancar (NewSession) el navegador sin pantalla con el perfil indicado y el proxy se ha detenido.",
+			err.Error(),
+		)
+		os.Exit(1)
 	}
+	defer webSess.Close()
+	// Descargas firmadas y subidas directas con la huella TLS de Chrome (uTLS), a juego
+	// con el User-Agent del Chromium de la sesión.
+	client.EnableWebSession(webSess, &webclient.Transport{Session: webSess, Base: auth.NewFingerprintedTransport()})
+	logger.Log("[WebDAV] 🌐 Modo Autenticación: SESIÓN WEB (navegador)")
+	checkCtx, checkCancel := context.WithTimeout(context.Background(), 45*time.Second)
+	if !webSess.CheckLogin(checkCtx) {
+		logger.Log("[!] ⚠️ Sesión web no iniciada. Abre el panel en /web-login/ para iniciar sesión en Movistar Cloud.")
+		_ = notifier.Alert(
+			"",
+			"", "Sesión web no iniciada (Modo Web)",
+			"Accede al panel web en /web-login/ para iniciar sesión en Movistar Cloud.",
+			"Arranque sin sesión activa, en espera de vinculación",
+		)
+	}
+	checkCancel()
 
 	var metaStore *cache.MetadataStore
-	var dbPath string
-	if webSess != nil {
-		dbPath = filepath.Join(config.TokensDir, "metadata_web.db")
-	}
-	if dbPath != "" {
+	dbPath := filepath.Join(config.TokensDir, "metadata_web.db")
+	{
 		var msErr error
 		metaStore, msErr = cache.NewMetadataStore(dbPath)
 		if msErr != nil {
@@ -130,11 +120,11 @@ func main() {
 		}
 	}
 
-	maxDown, maxUp := config.TransferLimits(client.WebMode())
+	maxDown, maxUp := config.TransferLimits()
 	webdav.SetTransferLimits(maxDown, maxUp)
 	webui.LoadUploadBandwidth()
-	if client.WebMode() && strings.TrimSpace(os.Getenv("SAPI_MAX_CONCURRENT")) == "" {
-		// En modo web las llamadas a la API ya las limita el navegador; aquí solo hay
+	if strings.TrimSpace(os.Getenv("SAPI_MAX_CONCURRENT")) == "" {
+		// Las llamadas a la API ya las limita el navegador; aquí solo hay
 		// que dejar sitio a cada transferencia para que una subida no frene las lecturas.
 		client.SetMaxConcurrentRequests(maxDown + maxUp + 2)
 	}
@@ -154,7 +144,7 @@ func main() {
 	}
 
 	// 2. Sincronización inicial de metadatos en segundo plano si hay credenciales activas
-	if metaStore != nil && !client.IsSessionExpired() && (client.WebMode() || cfg.JSessionID != "") {
+	if metaStore != nil && !client.IsSessionExpired() {
 		go func() {
 			logger.Log("[Metadata] 🔄 Iniciando sincronización de metadatos en segundo plano...")
 			if _, syncErr := metaStore.SyncChanges(client, false); syncErr != nil {
@@ -251,7 +241,7 @@ func main() {
 		}
 	}()
 	go uiServer.UpdateChecker().Start(ctx, time.Hour)
-	if webSess != nil {
+	{
 		view := webSess.LoginView()
 		uiServer.SetWebLogin(view.Handler("/web-login/"))
 		uiServer.SetWebRelogin(webSess.ReloginView().Handler("/web-relogin/"))
@@ -282,7 +272,7 @@ func main() {
 	_ = notifier.Alert(
 		"",
 		"🚀", "WebDAV Proxy iniciado",
-		"El servicio Movistar/O2 Cloud ha arrancado.",
+		"El servicio Movistar Cloud ha arrancado.",
 		fmt.Sprintf("WebDAV :%s | Panel Web :%s", webdavPort, webPort),
 	)
 
@@ -348,15 +338,10 @@ func runKeepAlive(ctx context.Context, client *sapi.Client, isRunning func() boo
 				timer.Reset(5 * time.Minute)
 				continue
 			}
-			if client.WebMode() {
-				// La comprobación también mantiene viva la sesión de la web.
-				if client.RefreshSession() {
-					logger.Log("[KeepAlive] 💓 Sesión web verificada en Movistar Cloud.")
-				}
-				timer.Reset(5 * time.Minute)
-				continue
+			// La comprobación también mantiene viva la sesión de la web.
+			if client.RefreshSession() {
+				logger.Log("[KeepAlive] 💓 Sesión web verificada en Movistar Cloud.")
 			}
-			// Sin sesión web no hay nada que mantener viva.
 			timer.Reset(5 * time.Minute)
 		}
 	}

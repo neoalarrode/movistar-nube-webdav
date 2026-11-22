@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// ErrEmptyOverwrite: se pidió sobrescribir un archivo con 0 bytes. O2 no lo admite
+// ErrEmptyOverwrite: se pidió sobrescribir un archivo con 0 bytes. La nube no lo admite
 // (responde MED-1049 «Wrong byte uploaded» y el original queda registrado sin
 // contenido y desaparece, comprobado el 20/11/2026): para vaciar un archivo hay que
 // subir uno nuevo y retirar el anterior.
-var ErrEmptyOverwrite = errors.New("O2 no admite sobrescribir un archivo con 0 bytes (el original se perdería); hay que subir uno nuevo")
+var ErrEmptyOverwrite = errors.New("la nube no admite sobrescribir un archivo con 0 bytes (el original se perdería); hay que subir uno nuevo")
 
 // UploadFileToFolderCtx sube un archivo (ver UploadFileToFolder). ctx es el de la
 // petición del cliente; la subida web no lo usa todavía.

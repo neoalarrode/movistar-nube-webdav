@@ -101,7 +101,6 @@ func TestControlLockVirtualEmulation(t *testing.T) {
 	_ = store.UpsertFolder(sapi.FolderItem{ID: 260, Name: "Control", ParentID: 250})
 
 	sapiClient, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "vk",
 	})
 	if err != nil {
@@ -292,7 +291,6 @@ func TestAutoHealHyperBackupWriterCinfo(t *testing.T) {
 	})
 
 	sapiClient, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "vk",
 	})
 	if err != nil {

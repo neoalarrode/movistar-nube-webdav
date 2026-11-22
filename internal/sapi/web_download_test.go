@@ -55,7 +55,7 @@ func webDownloadServer(t *testing.T, oldHits, lookups *int32) *httptest.Server {
 
 func newWebTestClient(t *testing.T, base string) *Client {
 	t.Helper()
-	c, err := NewClient(config.AccountConfig{Provider: "movistar"})
+	c, err := NewClient(config.AccountConfig{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,6 @@ func TestNormalDownload_ExpiredURLIsRefreshedAndRemembered(t *testing.T) {
 	var oldHits, lookups int32
 	srv := webDownloadServer(t, &oldHits, &lookups)
 	c, err := NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "vk",
 	})
 	if err != nil {
@@ -193,7 +192,6 @@ func TestUploadFileToFolder_TransientMED1048RetriesAndSucceeds(t *testing.T) {
 	defer srv.Close()
 
 	c, err := NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "vk",
 	})
 	if err != nil {

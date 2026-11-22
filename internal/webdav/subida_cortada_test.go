@@ -25,7 +25,7 @@ func (c *cuerpoQueSeCorta) Read(p []byte) (int, error) {
 
 func (c *cuerpoQueSeCorta) Close() error { return nil }
 
-// servidorQueCuentaSubidas monta el O2 de mentira y cuenta las subidas que le llegan.
+// servidorQueCuentaSubidas monta la nube de mentira y cuenta las subidas que le llegan.
 func servidorQueCuentaSubidas(t *testing.T) (*Server, *atomic.Int32, func()) {
 	t.Helper()
 	base := newMockSAPIServer(t)
@@ -37,7 +37,6 @@ func servidorQueCuentaSubidas(t *testing.T) (*Server, *atomic.Int32, func()) {
 		base.Config.Handler.ServeHTTP(w, r)
 	}))
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

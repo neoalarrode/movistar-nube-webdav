@@ -89,7 +89,6 @@ func setupMtimeServer(t *testing.T) (*Server, func() []map[string]interface{}) {
 	mock, uploads := newMtimeMockSAPI(t)
 	t.Cleanup(mock.Close)
 	client, err := sapi.NewClient(config.AccountConfig{
-		Provider:      "movistar",
 		ValidationKey: "test-vk",
 	})
 	if err != nil {

@@ -22,7 +22,7 @@ func TestStallReader(t *testing.T) {
 	pr, pw := io.Pipe()
 	s = newStallReader(pr, 60*time.Millisecond, func() { atomic.StoreInt32(&fired, 1) })
 	go func() { time.Sleep(150 * time.Millisecond); _, _ = pw.Write([]byte("x")); _ = pw.Close() }()
-	_, _ = io.ReadAll(s) // lectura esperando al origen: no cuenta
+	_, _ = io.ReadAll(s)               // lectura esperando al origen: no cuenta
 	time.Sleep(150 * time.Millisecond) // cuerpo ya enviado: esperar la respuesta no cuenta
 	if s.stop() || atomic.LoadInt32(&fired) != 0 {
 		t.Fatal("no debía cortar: el retraso era del origen o de la respuesta")

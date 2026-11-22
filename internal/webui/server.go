@@ -108,8 +108,7 @@ func NewServerWithAuth(client *sapi.Client, webdavServer *webdav.Server, authCfg
 	if client != nil {
 		client.OnSessionExpired = func(err error) {
 			if s.notifier != nil && s.notifier.IsConfigured() {
-				cfg := client.GetConfig()
-				_ = s.notifier.SendSessionExpiredAlert(cfg.Provider, "", err.Error())
+				_ = s.notifier.SendSessionExpiredAlert(err.Error())
 			}
 		}
 	}
@@ -802,7 +801,7 @@ func (s *Server) handleStorageInfo(w http.ResponseWriter, r *http.Request) {
 			space, err = s.client.GetStorageSpace()
 			if err != nil {
 				logger.Log("[WebUI] ⚠️ Error consultando espacio en almacenamiento: %v", err)
-				jsonResponse(w, http.StatusInternalServerError, map[string]interface{}{"status": "error", "message": "Error al consultar el espacio de almacenamiento en Movistar/O2 Cloud"})
+				jsonResponse(w, http.StatusInternalServerError, map[string]interface{}{"status": "error", "message": "Error al consultar el espacio de almacenamiento en Movistar Cloud"})
 				return
 			}
 		}
@@ -905,7 +904,7 @@ func (s *Server) handleTestTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := notifier.SendTestWith(botToken, chatID, "movistar"); err != nil {
+	if err := notifier.SendTestWith(botToken, chatID); err != nil {
 		jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
 			"status":  "error",
 			"message": err.Error(),

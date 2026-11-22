@@ -1,6 +1,6 @@
 # Colaboradores / Contributors
 
-Agradecemos enormemente a todas las personas que contribuyen a la mejora, estabilidad y compatibilidad de **Movistar / O2 Cloud WebDAV Proxy**.
+Agradecemos enormemente a todas las personas que contribuyen a la mejora, estabilidad y compatibilidad de **Movistar Nube WebDAV** y del proyecto original del que nace.
 
 ---
 
